@@ -1,0 +1,2014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0e14">
+<title>Stride &amp; Sword — Content Editor</title>
+<style>
+/* ============================================================
+   CONTENT EDITOR — desktop authoring tool for monsters, loot
+   tables and items. Shares the game's palette and its storage.
+   ============================================================ */
+:root{
+  --bg:#0b0e14; --bg-2:#121722; --bg-3:#1a2130; --bg-4:#232c3d;
+  --line:#2b3446; --line-2:#3a4661;
+  --ink:#e6ecf5; --ink-2:#a3b0c4; --ink-3:#6b7a92;
+  --gold:#e0a33e; --gold-dim:#8a6524; --blood:#c8453c; --ok:#54b37a; --warn:#d99a34;
+  --mana:#4a8fd4;
+  --r:6px; --r-lg:10px;
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+  --font:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.5 var(--font);
+     -webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:600}
+.hidden{display:none !important}
+.mono{font-family:var(--mono)}
+.dim{color:var(--ink-2)} .dimmer{color:var(--ink-3)} .tiny{font-size:11px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--bg-4);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:var(--line-2)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- controls ---------- */
+.btn{border:1px solid var(--line-2);background:var(--bg-3);padding:7px 13px;border-radius:var(--r);
+     font-weight:600;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;
+     transition:background .12s,border-color .12s}
+.btn:hover:not(:disabled){background:var(--bg-4);border-color:var(--gold-dim)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#c08a2e,#9c6d20);border-color:#d4a24c;color:#1a1206}
+.btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#d29a36,#ad7a25)}
+.btn.danger{background:#7d2b26;border-color:var(--blood)}
+.btn.danger:hover:not(:disabled){background:var(--blood)}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.btn.ghost:hover:not(:disabled){background:var(--bg-3)}
+.btn.sm{padding:4px 9px;font-size:11.5px}
+a.btn{color:var(--ink);text-decoration:none}
+a.btn:hover{color:var(--ink)}
+.btn.block{width:100%;justify-content:center}
+.input,select,textarea{width:100%;padding:7px 9px;border-radius:var(--r);
+  border:1px solid var(--line-2);background:#0a0d14;color:var(--ink);font-size:13px}
+.input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-dim);
+  box-shadow:0 0 0 3px rgba(224,163,62,.12)}
+textarea{resize:vertical;min-height:64px;line-height:1.5}
+select{cursor:pointer}
+label.f{display:block;margin-bottom:11px}
+label.f > span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--ink-3);margin-bottom:4px;font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:8px;margin-bottom:11px;cursor:pointer;font-size:13px}
+.check input{accent-color:var(--gold);width:16px;height:16px;flex:none;margin:0}
+
+/* ---------- shell ---------- */
+#ed{position:fixed;inset:0;display:flex;flex-direction:column}
+.edTop{display:flex;align-items:center;gap:14px;padding:0 14px;height:54px;flex:none;
+  background:var(--bg-2);border-bottom:1px solid var(--line)}
+.edBrand{display:flex;align-items:baseline;gap:9px}
+.edBrand b{font-size:15px;letter-spacing:1.6px;text-transform:uppercase;
+  background:linear-gradient(180deg,#f2d089,#c08a2e);-webkit-background-clip:text;background-clip:text;color:transparent}
+.edBrand span{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-3)}
+.edTabs{display:flex;gap:4px;background:var(--bg-3);padding:3px;border-radius:var(--r-lg);border:1px solid var(--line)}
+.edTabs button{border:0;background:transparent;padding:6px 14px;border-radius:var(--r);
+  color:var(--ink-3);font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px}
+.edTabs button.on{background:var(--bg-4);color:var(--ink)}
+.edTabs .n{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+  background:var(--bg-2);padding:0 5px;border-radius:99px;border:1px solid var(--line)}
+.edTabs button.on .n{color:var(--gold);border-color:var(--gold-dim)}
+.spacer{flex:1}
+
+.edBody{flex:1;display:flex;min-height:0}
+.edList{flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+.edForm{width:430px;flex:none;overflow-y:auto;background:var(--bg-2);padding:16px}
+.edStatus{height:30px;flex:none;display:flex;align-items:center;gap:16px;padding:0 14px;
+  background:var(--bg-2);border-top:1px solid var(--line);font-size:11px;color:var(--ink-3);
+  font-family:var(--mono)}
+.edStatus b{color:var(--ink-2);font-weight:600}
+
+.listBar{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--line);flex:none}
+.listBar .input{max-width:280px}
+.listWrap{flex:1;overflow-y:auto}
+
+/* ---------- table ---------- */
+table.grid{width:100%;border-collapse:collapse;font-size:12.5px}
+table.grid th{position:sticky;top:0;z-index:2;background:var(--bg-2);text-align:left;
+  padding:8px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--ink-3);border-bottom:1px solid var(--line);font-weight:700;white-space:nowrap;cursor:pointer;user-select:none}
+table.grid th:hover{color:var(--ink-2)}
+table.grid th .ar{color:var(--gold);font-size:9px}
+table.grid td{padding:8px 12px;border-bottom:1px solid rgba(43,52,70,.55);vertical-align:middle}
+table.grid tbody tr{cursor:pointer}
+table.grid tbody tr:hover{background:var(--bg-2)}
+table.grid tbody tr.on{background:linear-gradient(90deg,rgba(224,163,62,.14),transparent)}
+table.grid tbody tr.on td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
+td.num,th.num{text-align:right;font-family:var(--mono)}
+.nameCell{display:flex;align-items:center;gap:9px;min-width:0}
+.nameCell b{font-weight:600}
+.emojiIcon{font-size:16px;line-height:1}
+.gicon{display:block}
+.iconBox{width:30px;height:30px;border-radius:var(--r);background:var(--bg-3);
+  border:1px solid var(--line);display:grid;place-items:center;flex:none}
+
+/* ---------- rarity chips ---------- */
+.rchip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.6px;padding:2px 8px;border-radius:99px;
+  border:1px solid currentColor;background:rgba(255,255,255,.04)}
+.rdot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10.5px;
+  border:1px solid var(--line-2);color:var(--ink-2);text-transform:capitalize}
+
+/* ---------- form panel ---------- */
+.formHead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.formHead h3{font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sect{margin:18px 0 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--ink-3);font-weight:700;display:flex;align-items:center;gap:8px}
+.sect::after{content:"";flex:1;height:1px;background:var(--line)}
+.emptyForm{color:var(--ink-3);text-align:center;padding:60px 20px;font-size:13px;line-height:1.7}
+.formActions{display:flex;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.err{color:var(--blood);font-size:12px;min-height:16px;margin:2px 0 6px}
+
+/* live preview of rarity scaling */
+.preview{background:var(--bg-3);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.preview .pr{display:flex;justify-content:space-between;align-items:baseline;
+  padding:4px 0;border-bottom:1px solid rgba(43,52,70,.6);font-size:12px}
+.preview .pr:last-child{border-bottom:0}
+.preview .pr b{font-family:var(--mono);font-size:13px}
+.preview .pr .was{color:var(--ink-3);font-family:var(--mono);font-size:11px;margin-right:6px}
+.preview .up{color:var(--ok)}
+
+/* icon picker */
+.iconGrid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+.iconGrid button{aspect-ratio:1;border:1px solid var(--line);background:var(--bg-3);
+  border-radius:var(--r);display:grid;place-items:center;padding:0;color:var(--ink-2)}
+.iconGrid button:hover{background:var(--bg-4);color:var(--ink)}
+.iconGrid button.on{border-color:var(--gold);background:rgba(224,163,62,.14);color:var(--gold)}
+
+/* loot rows */
+.lootRow{display:grid;grid-template-columns:1fr 78px 30px;gap:7px;align-items:center;margin-bottom:6px}
+.lootRow .pct{position:relative}
+.lootRow .pct::after{content:"%";position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  color:var(--ink-3);font-size:11px;pointer-events:none}
+.lootRow .pct input{padding-right:20px;text-align:right;font-family:var(--mono)}
+.xBtn{width:30px;height:30px;border-radius:var(--r);border:1px solid var(--line);
+  background:var(--bg-3);padding:0;line-height:1;color:var(--ink-3)}
+.xBtn:hover{background:#7d2b26;border-color:var(--blood);color:var(--ink)}
+.lootSum{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-2);padding:8px 10px;background:var(--bg-3);border-radius:var(--r);margin-top:8px}
+.noteBox{background:var(--bg-3);border:1px solid var(--line);border-left:2px solid var(--mana);
+  border-radius:var(--r);padding:9px 11px;font-size:11.5px;line-height:1.6;color:var(--ink-2);margin-top:9px}
+
+/* rarity tab */
+.scaleGrid{width:100%;border-collapse:collapse;font-size:12.5px}
+.scaleGrid th{text-align:left;padding:8px 10px;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.8px;color:var(--ink-3);border-bottom:1px solid var(--line)}
+.scaleGrid td{padding:6px 10px;border-bottom:1px solid rgba(43,52,70,.55)}
+.scaleGrid input{width:74px;text-align:right;font-family:var(--mono);padding:5px 7px}
+.pad{padding:16px}
+
+/* modal */
+.modalBack{position:fixed;inset:0;z-index:100;background:rgba(5,7,11,.8);display:flex;
+  align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.modal{width:100%;max-width:520px;background:var(--bg-2);border:1px solid var(--line-2);
+  border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.modal h3{padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px}
+.modal .mb{padding:16px}
+.modal .mf{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+
+/* toasts */
+#toasts{position:fixed;top:64px;left:0;right:0;z-index:200;display:flex;flex-direction:column;
+  align-items:center;gap:6px;pointer-events:none}
+.toast{background:rgba(26,33,48,.97);border:1px solid var(--line-2);border-left:3px solid var(--gold);
+  padding:8px 14px;border-radius:var(--r);font-size:12.5px;box-shadow:var(--shadow);max-width:520px}
+.toast.good{border-left-color:var(--ok)}
+.toast.bad{border-left-color:var(--blood)}
+
+@media (max-width:1100px){ .edForm{width:370px} }
+@media (max-width:820px){
+  .edBody{flex-direction:column}
+  .edForm{width:auto;border-top:1px solid var(--line)}
+  .edList{border-right:0}
+}
+</style>
+</head>
+<body>
+<div id="ed"></div>
+<script>
+"use strict";
+/* ==========================================================================
+   STRIDE & SWORD
+   A location-based roguelike. Phases 1-3 of the spec, single file, no build.
+
+   Module map (mirrors the component tree in the design doc):
+     Utils/StorageService      -> Store
+     Utils/APIService          -> API           (scaffolded, local fallback)
+     Utils/LocationService     -> Loc
+     Utils/CombatCalculator    -> Calc
+     Auth/*                    -> Auth + Screens.auth
+     CharacterCreation/*       -> Screens.create
+     MainGame/Map/*            -> MapView
+     MainGame/HUD/*            -> HUD
+     MainGame/Combat/*         -> Combat
+     MainGame/Node/*           -> Nodes
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------
+   0. Utilities
+   ------------------------------------------------------------------------- */
+const $  = (sel, root) => (root || document).querySelector(sel);
+const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+const el = (tag, cls, html) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html != null) n.innerHTML = html;
+  return n;
+};
+const uid = (p) => (p ? p + "_" : "") +
+  Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const rnd  = (a, b) => a + Math.random() * (b - a);
+const rndI = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const chance = (pct) => Math.random() * 100 < pct;
+const esc = (s) => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
+const nowTs = () => Date.now();
+
+/* Seeded PRNG so a given zone always generates the same node layout. */
+function seededRandom(seedStr) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return function () {
+    h ^= h << 13; h >>>= 0;
+    h ^= h >>> 17;
+    h ^= h << 5;  h >>>= 0;
+    return h / 4294967296;
+  };
+}
+
+/* Geo helpers ------------------------------------------------------------ */
+const EARTH_R = 6371000; // metres
+const toRad = (d) => d * Math.PI / 180;
+const toDeg = (r) => r * 180 / Math.PI;
+
+/** Great-circle distance in metres between two {lat,lng}-ish points. */
+function haversine(lat1, lon1, lat2, lon2) {
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Project a point `dist` metres from origin along `bearing` degrees. */
+function projectPoint(lat, lng, dist, bearingDeg) {
+  const br = toRad(bearingDeg), d = dist / EARTH_R;
+  const la1 = toRad(lat), lo1 = toRad(lng);
+  const la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(br));
+  const lo2 = lo1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(la1),
+                               Math.cos(d) - Math.sin(la1) * Math.sin(la2));
+  return { latitude: toDeg(la2), longitude: ((toDeg(lo2) + 540) % 360) - 180 };
+}
+
+const fmtDist = (m) => m == null ? "--" : (m < 1000 ? Math.round(m) + " m" : (m / 1000).toFixed(2) + " km");
+
+/* -------------------------------------------------------------------------
+   1. StorageService
+   localStorage-backed, with a transparent in-memory fallback so the game
+   still runs in sandboxed frames / private modes where storage throws.
+   ------------------------------------------------------------------------- */
+const Store = (function () {
+  const mem = Object.create(null);
+  let durable = true;
+  try {
+    const probe = "__ss_probe__";
+    localStorage.setItem(probe, "1");
+    localStorage.removeItem(probe);
+  } catch (e) { durable = false; }
+
+  function raw(key) {
+    if (durable) { try { return localStorage.getItem(key); } catch (e) { durable = false; } }
+    return key in mem ? mem[key] : null;
+  }
+  function setRaw(key, val) {
+    mem[key] = val;
+    if (durable) {
+      try { localStorage.setItem(key, val); }
+      catch (e) {
+        durable = false;
+        console.warn("[Store] localStorage unavailable, using memory:", e && e.message);
+      }
+    }
+  }
+  return {
+    get isDurable() { return durable; },
+    get(key, fallback) {
+      const v = raw(key);
+      if (v == null) return fallback === undefined ? null : fallback;
+      try { return JSON.parse(v); }
+      catch (e) { console.warn("[Store] corrupt key", key); return fallback === undefined ? null : fallback; }
+    },
+    set(key, value) { setRaw(key, JSON.stringify(value)); return value; },
+    patch(key, mutator) {
+      const cur = this.get(key, {}) || {};
+      mutator(cur);
+      return this.set(key, cur);
+    },
+    remove(key) {
+      delete mem[key];
+      if (durable) { try { localStorage.removeItem(key); } catch (e) {} }
+    },
+    /* Session (tab-scoped) values, same fallback story. */
+    session: {
+      get(key, fb) {
+        try { const v = sessionStorage.getItem(key); return v == null ? (fb ?? null) : JSON.parse(v); }
+        catch (e) { return key in mem ? JSON.parse(mem["__s_" + key] || "null") : (fb ?? null); }
+      },
+      set(key, val) {
+        mem["__s_" + key] = JSON.stringify(val);
+        try { sessionStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+      },
+      remove(key) {
+        delete mem["__s_" + key];
+        try { sessionStorage.removeItem(key); } catch (e) {}
+      }
+    },
+    usageBytes() {
+      let n = 0;
+      try { for (const k in localStorage) if (Object.prototype.hasOwnProperty.call(localStorage, k)) n += (localStorage[k] || "").length; }
+      catch (e) {}
+      return n;
+    }
+  };
+})();
+
+/* Canonical localStorage keys, per the storage strategy in the design doc. */
+const K = {
+  session:     "user_session",
+  accounts:    "accounts",
+  characters:  "characters",
+  zones:       "zones",
+  nodes:       "nodes",
+  inventories: "inventories",
+  encounters:  "encounters",
+  settings:    "settings",
+  walk:        "walk_stats"
+};
+
+/* -------------------------------------------------------------------------
+   2. APIService  (scaffolded)
+   Every persistence call in the game goes through API.request(). Today it
+   short-circuits to the localStorage handlers below. Point BASE_URL at a
+   deployed backend and `isOnline` flips: the same call sites then hit
+   real endpoints, with localStorage as the offline fallback.
+
+   Endpoints the backend must implement (Phase 5):
+     POST   /auth/register              POST  /combat/start
+     POST   /auth/login                 POST  /combat/{id}/action
+     GET    /user/profile               GET   /combat/{id}
+     PATCH  /user/profile               PATCH /combat/{id}/end
+     POST   /location/create-zone       POST  /inventory/item/add
+     GET    /location/zone/{userId}     DELETE/inventory/item/{itemId}
+     POST   /nodes/generate             PATCH /inventory/item/{id}/equip
+     GET    /nodes/zone/{zoneId}        GET   /inventory/{characterId}
+     PATCH  /nodes/{nodeId}/status      PATCH /character/{id}/experience
+     GET    /nodes/{nodeId}/encounters  POST  /character/{id}/levelup
+     GET    /leaderboard                GET   /character/{id}/progression
+   ------------------------------------------------------------------------- */
+const API = (function () {
+  const BASE_URL = null; // <-- set to "https://your-host/api" once the backend exists
+
+  class APIService {
+    constructor(baseURL) {
+      this.baseURL = baseURL || "http://localhost:3000/api";
+      this.isOnline = !!baseURL;
+      this.log = [];
+    }
+    getToken() {
+      const s = Store.get(K.session, {}) || {};
+      return s.token || null;
+    }
+    async request(endpoint, method = "GET", data = null) {
+      this.log.push({ t: nowTs(), method, endpoint });
+      if (this.log.length > 200) this.log.shift();
+
+      if (!this.isOnline) return this.handleLocal(endpoint, method, data);
+
+      try {
+        const options = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + this.getToken()
+          }
+        };
+        if (data) options.body = JSON.stringify(data);
+        const res = await fetch(this.baseURL + endpoint, options);
+        if (res.status === 401) { Auth.logout(); return { success: false, message: "Session expired" }; }
+        if (!res.ok) return { success: false, message: "HTTP " + res.status };
+        return await res.json();
+      } catch (err) {
+        console.error("API Error:", err);
+        return this.handleLocal(endpoint, method, data); // offline fallback
+      }
+    }
+    /* Local mode: resolved by Local.route() below. */
+    handleLocal(endpoint, method, data) {
+      const out = Local.route(endpoint, method, data);
+      if (!out) {
+        console.warn("[LOCAL MODE] unhandled " + method + " " + endpoint);
+        return { success: false, message: "Not implemented locally" };
+      }
+      return out;
+    }
+  }
+  return new APIService(BASE_URL);
+})();
+
+/* -------------------------------------------------------------------------
+   3. Local backend emulation
+   The localStorage implementation of every endpoint above. When the real
+   backend lands, this module is what gets deleted.
+   ------------------------------------------------------------------------- */
+const Local = (function () {
+  /* Deliberately weak: a stand-in for a real server-side hash. Never ship. */
+  function pseudoHash(pw) {
+    let h = 5381;
+    for (let i = 0; i < pw.length; i++) h = ((h << 5) + h + pw.charCodeAt(i)) | 0;
+    return "lh$" + (h >>> 0).toString(16) + "$" + pw.length;
+  }
+
+  const routes = [
+    ["POST", /^\/auth\/register$/, (m, d) => {
+      const accounts = Store.get(K.accounts, {}) || {};
+      const taken = Object.values(accounts).some(a =>
+        a.username.toLowerCase() === d.username.toLowerCase());
+      if (taken) return { success: false, message: "That username is already taken." };
+      const userId = uid("usr");
+      accounts[userId] = {
+        userId, username: d.username, email: d.email || "",
+        passwordHash: pseudoHash(d.password),
+        createdAt: nowTs(), lastLogin: nowTs()
+      };
+      Store.set(K.accounts, accounts);
+      return { success: true, user: publicUser(accounts[userId]), token: "local." + userId };
+    }],
+
+    ["POST", /^\/auth\/login$/, (m, d) => {
+      const accounts = Store.get(K.accounts, {}) || {};
+      const acct = Object.values(accounts).find(a =>
+        a.username.toLowerCase() === d.username.toLowerCase());
+      if (!acct || acct.passwordHash !== pseudoHash(d.password))
+        return { success: false, message: "Wrong username or password." };
+      acct.lastLogin = nowTs();
+      Store.set(K.accounts, accounts);
+      return { success: true, user: publicUser(acct), token: "local." + acct.userId };
+    }],
+
+    ["GET", /^\/user\/profile$/, () => {
+      const s = Store.get(K.session, {}) || {};
+      const accounts = Store.get(K.accounts, {}) || {};
+      const a = accounts[s.userId];
+      return a ? { success: true, user: publicUser(a) } : { success: false, message: "No session" };
+    }],
+
+    ["PATCH", /^\/user\/profile$/, (m, d) => {
+      const s = Store.get(K.session, {}) || {};
+      Store.patch(K.accounts, (acc) => { if (acc[s.userId]) Object.assign(acc[s.userId], d); });
+      return { success: true };
+    }],
+
+    /* --- characters --- */
+    ["POST", /^\/character\/create$/, (m, d) => {
+      Store.patch(K.characters, (chars) => { chars[d.characterId] = d; });
+      Store.patch(K.inventories, (inv) => { inv[d.characterId] = []; });
+      return { success: true, character: d };
+    }],
+    ["PATCH", /^\/character\/[^/]+$/, (m, d) => {
+      Store.patch(K.characters, (chars) => {
+        if (chars[m[0].split("/")[2]]) Object.assign(chars[m[0].split("/")[2]], d);
+      });
+      return { success: true };
+    }],
+    ["GET", /^\/character\/list\/[^/]+$/, (m) => {
+      const userId = m[0].split("/")[3];
+      const chars = Store.get(K.characters, {}) || {};
+      return { success: true, characters: Object.values(chars).filter(c => c.userId === userId) };
+    }],
+    ["DELETE", /^\/character\/[^/]+$/, (m) => {
+      const id = m[0].split("/")[2];
+      Store.patch(K.characters, (c) => { delete c[id]; });
+      Store.patch(K.inventories, (i) => { delete i[id]; });
+      return { success: true };
+    }],
+
+    /* --- zones & nodes --- */
+    ["POST", /^\/location\/create-zone$/, (m, d) => {
+      Store.patch(K.zones, (z) => { z[d.zoneId] = d; });
+      return { success: true, zone: d };
+    }],
+    ["GET", /^\/location\/zone\/[^/]+$/, (m) => {
+      const userId = m[0].split("/")[3];
+      const zones = Store.get(K.zones, {}) || {};
+      return { success: true, zones: Object.values(zones).filter(z => z.userId === userId) };
+    }],
+    ["POST", /^\/nodes\/generate$/, (m, d) => {
+      Store.patch(K.nodes, (all) => { d.nodes.forEach(n => { all[n.nodeId] = n; }); });
+      return { success: true, nodes: d.nodes };
+    }],
+    ["GET", /^\/nodes\/zone\/[^/]+$/, (m) => {
+      const zoneId = m[0].split("/")[3];
+      const all = Store.get(K.nodes, {}) || {};
+      return { success: true, nodes: Object.values(all).filter(n => n.zoneId === zoneId) };
+    }],
+    ["PATCH", /^\/nodes\/[^/]+\/status$/, (m, d) => {
+      const nodeId = m[0].split("/")[2];
+      Store.patch(K.nodes, (all) => { if (all[nodeId]) Object.assign(all[nodeId], d); });
+      return { success: true };
+    }],
+
+    /* --- combat --- */
+    ["POST", /^\/combat\/start$/, (m, d) => {
+      Store.patch(K.encounters, (e) => { e[d.encounterId] = d; });
+      return { success: true, encounter: d };
+    }],
+    ["PATCH", /^\/combat\/[^/]+\/end$/, (m, d) => {
+      const id = m[0].split("/")[2];
+      Store.patch(K.encounters, (e) => { if (e[id]) Object.assign(e[id], d); });
+      return { success: true };
+    }],
+
+    /* --- inventory --- */
+    ["GET", /^\/inventory\/[^/]+$/, (m) => {
+      const cid = m[0].split("/")[2];
+      const inv = Store.get(K.inventories, {}) || {};
+      return { success: true, items: inv[cid] || [] };
+    }],
+    ["POST", /^\/inventory\/item\/add$/, (m, d) => {
+      Store.patch(K.inventories, (inv) => {
+        if (!inv[d.characterId]) inv[d.characterId] = [];
+        inv[d.characterId].push(d.item);
+      });
+      return { success: true };
+    }],
+    ["POST", /^\/inventory\/sync$/, (m, d) => {
+      Store.patch(K.inventories, (inv) => { inv[d.characterId] = d.items; });
+      return { success: true };
+    }]
+  ];
+
+  function publicUser(a) {
+    return { userId: a.userId, username: a.username, email: a.email,
+             createdAt: a.createdAt, lastLogin: a.lastLogin };
+  }
+
+  return {
+    route(endpoint, method, data) {
+      for (const [verb, re, fn] of routes) {
+        if (verb !== method) continue;
+        const m = endpoint.match(re);
+        if (m) { m[0] = endpoint; return fn(m, data || {}); }
+      }
+      return null;
+    }
+  };
+})();
+
+/* -------------------------------------------------------------------------
+   4. Auth
+   ------------------------------------------------------------------------- */
+const Auth = {
+  current: null,
+  async register(username, email, password) {
+    const r = await API.request("/auth/register", "POST", { username, email, password });
+    if (r.success) this._startSession(r);
+    return r;
+  },
+  async login(username, password) {
+    const r = await API.request("/auth/login", "POST", { username, password });
+    if (r.success) this._startSession(r);
+    return r;
+  },
+  _startSession(r) {
+    const sess = { sessionId: uid("sess"), userId: r.user.userId, loginTime: nowTs(), token: r.token };
+    Store.set(K.session, sess);
+    Store.session.set("currentUserId", r.user.userId);
+    this.current = r.user;
+  },
+  restore() {
+    const s = Store.get(K.session, null);
+    if (!s || !s.userId) return null;
+    const accounts = Store.get(K.accounts, {}) || {};
+    const a = accounts[s.userId];
+    if (!a) { Store.remove(K.session); return null; }
+    this.current = { userId: a.userId, username: a.username, email: a.email,
+                     createdAt: a.createdAt, lastLogin: a.lastLogin };
+    Store.session.set("currentUserId", a.userId);
+    return this.current;
+  },
+  logout() {
+    Store.remove(K.session);
+    Store.session.remove("currentUserId");
+    this.current = null;
+    Game.reset();
+    Screens.show("auth");
+  }
+};
+/* ==========================================================================
+   CONTENT — the authored game database, shared by the game and the editor.
+
+   Three tables, all arrays of plain rows in localStorage:
+
+     content_monsters   what you fight
+     content_loot       loot tables: parallel item / percentage lists
+     content_items      gear and consumables
+
+   Rarity is one vocabulary across monsters and items, with a colour per tier
+   and a multiplier set that scales a monster's authored *base* numbers. Base
+   values are what you type; effective values are what the game uses. Nothing
+   is ever written back multiplied — the scale is applied on read, so changing
+   a multiplier restyles every monster of that rarity at once.
+   ========================================================================== */
+const Content = (function () {
+
+  const KEYS = {
+    monsters: "content_monsters",
+    loot:     "content_loot",
+    items:    "content_items",
+    config:   "content_config"
+  };
+
+  /* ---------------------------------------------------------------- rarity */
+  const RARITY = {
+    common:    { key: "common",    name: "Common",    color: "#9aa7ba", order: 0 },
+    uncommon:  { key: "uncommon",  name: "Uncommon",  color: "#5fae67", order: 1 },
+    rare:      { key: "rare",      name: "Rare",      color: "#4a8fd4", order: 2 },
+    epic:      { key: "epic",      name: "Epic",      color: "#a76fd4", order: 3 },
+    legendary: { key: "legendary", name: "Legendary", color: "#e0a33e", order: 4 },
+    mythic:    { key: "mythic",    name: "Mythic",    color: "#e05c5c", order: 5 }
+  };
+  const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+
+  /* Monster scaling per rarity. Editable from the editor's Rarity tab.
+     lootRolls is extra rolls of the monster's loot table; lootTilt biases
+     which tier of item a procedural fallback drop lands on. */
+  const DEFAULT_SCALE = {
+    common:    { hp: 1.00, dmg: 1.00, armor: 1.00, exp: 1.0, lootRolls: 0, lootTilt: 1.00 },
+    uncommon:  { hp: 1.18, dmg: 1.12, armor: 1.10, exp: 1.3, lootRolls: 0, lootTilt: 1.15 },
+    rare:      { hp: 1.45, dmg: 1.28, armor: 1.25, exp: 1.8, lootRolls: 1, lootTilt: 1.35 },
+    epic:      { hp: 1.90, dmg: 1.50, armor: 1.45, exp: 2.8, lootRolls: 1, lootTilt: 1.60 },
+    legendary: { hp: 2.60, dmg: 1.80, armor: 1.70, exp: 4.5, lootRolls: 2, lootTilt: 2.00 },
+    mythic:    { hp: 3.60, dmg: 2.20, armor: 2.00, exp: 7.0, lootRolls: 3, lootTilt: 2.60 }
+  };
+
+  const MONSTER_TYPES = ["beast", "humanoid", "creature", "undead", "elemental",
+                         "construct", "aberration", "dragon", "spirit", "plant"];
+
+  const DAMAGE_TYPES = ["physical", "slashing", "piercing", "blunt", "fire", "frost",
+                        "lightning", "poison", "arcane", "shadow", "holy"];
+
+  /* Damage types the game resolves against magic defence rather than armour. */
+  const MAGIC_DAMAGE = ["fire", "frost", "lightning", "arcane", "shadow", "holy", "poison"];
+
+  /* ------------------------------------------------------------- gear slots
+     gameType maps an authored slot onto the three equipment slots the game
+     actually has, so authored gear is equippable without further work. */
+  const GEAR_SLOTS = [
+    { key: "helm",     label: "Helm",      gameType: "armor",      icon: "helm" },
+    { key: "shoulder", label: "Shoulders", gameType: "armor",      icon: "shoulder" },
+    { key: "chest",    label: "Chest",     gameType: "armor",      icon: "chest" },
+    { key: "clothing", label: "Clothing",  gameType: "armor",      icon: "cloth" },
+    { key: "gloves",   label: "Gloves",    gameType: "armor",      icon: "gloves" },
+    { key: "belt",     label: "Belt",      gameType: "armor",      icon: "belt" },
+    { key: "legs",     label: "Legs",      gameType: "armor",      icon: "legs" },
+    { key: "boots",    label: "Boots",     gameType: "armor",      icon: "boots" },
+    { key: "cloak",    label: "Cloak",     gameType: "armor",      icon: "cloak" },
+    { key: "shield",   label: "Shield",    gameType: "armor",      icon: "shield" },
+    { key: "sword",    label: "Sword",     gameType: "weapon",     icon: "sword" },
+    { key: "axe",      label: "Axe",       gameType: "weapon",     icon: "axe" },
+    { key: "mace",     label: "Mace",      gameType: "weapon",     icon: "mace" },
+    { key: "dagger",   label: "Dagger",    gameType: "weapon",     icon: "dagger" },
+    { key: "spear",    label: "Spear",     gameType: "weapon",     icon: "spear" },
+    { key: "bow",      label: "Bow",       gameType: "weapon",     icon: "bow" },
+    { key: "staff",    label: "Staff",     gameType: "weapon",     icon: "staff" },
+    { key: "wand",     label: "Wand",      gameType: "weapon",     icon: "wand" },
+    { key: "ring",     label: "Ring",      gameType: "trinket",    icon: "ring" },
+    { key: "amulet",   label: "Amulet",    gameType: "trinket",    icon: "amulet" },
+    { key: "gem",      label: "Gem",       gameType: "trinket",    icon: "gem" },
+    { key: "potion",   label: "Potion",    gameType: "potion",     icon: "potion" },
+    { key: "scroll",   label: "Scroll",    gameType: "consumable", icon: "scroll" },
+    { key: "tome",     label: "Tome",      gameType: "quest",      icon: "tome" }
+  ];
+
+  /* ------------------------------------------------------------------ icons
+     24 originals on a 24px grid. Stroked with currentColor so a rarity colour
+     tints them, with a little fill for weight. */
+  const ICONS = {
+    sword:    '<path d="M20 3.5 12.5 11l-1.4-1.4L18.6 2H21z"/><path d="M11.8 10.2 5 17v2h2l6.8-6.8"/><path d="m4 20 1.6-1.6M9.2 12.6l2.2 2.2"/>',
+    axe:      '<path d="M5.6 20.8 13.1 13.3"/><path d="M13.5 12.9 9.3 8.7l4.4-4.4a2.9 2.9 0 0 1 4.1 0l.3.3a2.9 2.9 0 0 1 0 4.1z"/><path d="m7.4 15.2 2.6 2.6"/>',
+    mace:     '<path d="M3.5 20.5 11 13"/><circle cx="15" cy="9" r="4.6"/><path d="M15 1.6v2.6M15 13.8v2.6M8.2 9h2.2M19.6 9h2.6"/>',
+    dagger:   '<path d="M12 2.4 15.6 10.6H8.4z"/><path d="M5.8 12.2h12.4"/><path d="M12 12.2v5"/><circle cx="12" cy="19" r="1.7"/>',
+    spear:    '<path d="M12 1.8c1 1.4 1.5 2.5 1.5 3.6S13 7.9 12 9c-1-1.1-1.5-2.3-1.5-3.6S11 3.2 12 1.8Z"/><path d="M12 9v13.2"/><path d="M10.1 10.9h3.8"/>',
+    bow:      '<path d="M8 2.6c6.4 3.8 6.4 15 0 18.8"/><path d="M8 2.6v18.8"/><path d="M5.5 12h13"/><path d="m15 8.8 3.4 3.2-3.4 3.2"/>',
+    staff:    '<path d="M12 8v13"/><circle cx="12" cy="5" r="3"/><path d="M9.5 11h5"/>',
+    wand:     '<path d="M4.2 20.8 12.4 12.6"/><path d="M17.4 2.6 19 6.9 23.2 8.4 19 9.9 17.4 14.2 15.8 9.9 11.6 8.4 15.8 6.9z"/>',
+    helm:     '<path d="M5 12a7 7 0 0 1 14 0v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M9 12v4M15 12v4M5 14h14"/>',
+    shoulder: '<path d="M4 15c0-5 3.6-8 8-8s8 3 8 8v2a2 2 0 0 1-2 2h-3l-1-3H9l-1 3H6a2 2 0 0 1-2-2z"/><path d="M8.5 10.5c2.3-1.3 4.7-1.3 7 0"/>',
+    chest:    '<path d="M7 4h10l3 3-2 3v8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3v-8L4 7z"/><path d="M12 7v14M8 11h8"/>',
+    cloth:    '<path d="M8 3h8l2 4-2 1v13H8V8L6 7z"/><path d="M10 3c0 1.4.9 2 2 2s2-.6 2-2"/>',
+    gloves:   '<path d="M7 10V6a1.6 1.6 0 0 1 3.2 0v3M10.2 9V5a1.6 1.6 0 0 1 3.2 0v4M13.4 9.5V7a1.6 1.6 0 0 1 3.2 0v6.5c0 4-2.4 7.5-5.4 7.5S6 17.5 6 14v-3a1.5 1.5 0 0 1 3 0"/>',
+    belt:     '<path d="M2 9h20v6H2z"/><path d="M9 9v6M15 9v6"/><path d="M11 11h2v2h-2z"/>',
+    legs:     '<path d="M7 3h10l-1 9-1 9h-3l-1-7-1 7H7l-1-9z"/><path d="M6.5 8h11"/>',
+    boots:    '<path d="M6 3h5v10l6 3.5c1.2.7 2 1.6 2 2.7V21H6z"/><path d="M6 17h13"/>',
+    cloak:    '<path d="M12 3c-3 0-5 1.5-6 4L3 21h18l-3-14c-1-2.5-3-4-6-4Z"/><path d="M9 7c1 2 5 2 6 0"/>',
+    shield:   '<path d="M12 2 4 5v7c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5z"/><path d="M12 7v9M8.5 11.5h7"/>',
+    ring:     '<circle cx="12" cy="15" r="6"/><path d="m12 3 2.6 3.4L12 9.8 9.4 6.4z"/>',
+    amulet:   '<path d="M6 3c0 6 3 8 6 8s6-2 6-8"/><path d="m12 11 3.5 4-3.5 6-3.5-6z"/>',
+    gem:      '<path d="m12 3 6 5-6 13L6 8z"/><path d="M6 8h12M12 3 9 8l3 13M12 3l3 5-3 13"/>',
+    potion:   '<path d="M10 3h4v5l3.4 6.2A5 5 0 0 1 13 21h-2a5 5 0 0 1-4.4-6.8L10 8z"/><path d="M9 3h6M7.4 14.5h9.2"/>',
+    scroll:   '<path d="M6 4h12v14a3 3 0 0 1-3 3H6a3 3 0 0 0 3-3z"/><circle cx="18" cy="4" r="2.4"/><path d="M9 9h6M9 13h6"/>',
+    tome:     '<path d="M4 4h11a3 3 0 0 1 3 3v14H7a3 3 0 0 1-3-3z"/><path d="M4 18a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/>',
+    coin:     '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'
+  };
+  const ICON_KEYS = Object.keys(ICONS);
+
+  /* ------------------------------------------------------------------ store */
+  function read(kind) {
+    const v = Store.get(KEYS[kind], null);
+    return Array.isArray(v) ? v : [];
+  }
+  function write(kind, rows) { Store.set(KEYS[kind], rows); return rows; }
+
+  function config() {
+    const c = Store.get(KEYS.config, null) || {};
+    const scale = {};
+    RARITY_ORDER.forEach(r => { scale[r] = Object.assign({}, DEFAULT_SCALE[r], (c.scale || {})[r]); });
+    return { scale };
+  }
+  function saveConfig(c) { Store.set(KEYS.config, c); return c; }
+
+  /* ------------------------------------------------------------- scaling */
+  function scaleOf(rarity) {
+    const c = config();
+    return c.scale[rarity] || c.scale.common;
+  }
+
+  /**
+   * Authored base numbers -> the numbers the game uses. Never written back:
+   * change a multiplier and every monster of that rarity changes with it.
+   */
+  function effective(m) {
+    const s = scaleOf(m.rarity);
+    return {
+      hp:      Math.max(1, Math.round((+m.baseHp || 1) * s.hp)),
+      atkMin:  Math.max(1, Math.round((+m.attackMin || 1) * s.dmg)),
+      atkMax:  Math.max(1, Math.round((+m.attackMax || 1) * s.dmg)),
+      armor:   Math.max(0, Math.round((+m.armor || 0) * s.armor)),
+      exp:     Math.max(0, Math.round((+m.expReward || 0) * s.exp)),
+      gold:    Math.max(0, Math.round((+m.goldReward || 0) * s.exp)),
+      lootRolls: s.lootRolls,
+      lootTilt:  s.lootTilt,
+      scale: s
+    };
+  }
+
+  /* --------------------------------------------------------------- helpers */
+  function iconSvg(iconKey, size, color) {
+    const body = ICONS[iconKey] || ICONS.gem;
+    return '<svg class="gicon" viewBox="0 0 24 24" width="' + (size || 20) + '" height="' + (size || 20) +
+      '" fill="none" stroke="' + (color || "currentColor") +
+      '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      body + "</svg>";
+  }
+
+  /** Icon markup for anything the game shows in a list: authored or procedural. */
+  function itemIconHtml(item, size) {
+    if (item && item.iconKey && ICONS[item.iconKey]) {
+      return iconSvg(item.iconKey, size, rarityColor(item.rarity));
+    }
+    return '<span class="emojiIcon">' + (item && item.icon ? item.icon : "•") + "</span>";
+  }
+
+  function rarityColor(r) { return (RARITY[r] || RARITY.common).color; }
+  function rarityName(r)  { return (RARITY[r] || RARITY.common).name; }
+
+  function slotDef(key) { return GEAR_SLOTS.find(s => s.key === key) || GEAR_SLOTS[0]; }
+
+  function newId(prefix) { return prefix + "_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); }
+
+  /* ------------------------------------------------------------------ CRUD */
+  function list(kind) { return read(kind); }
+  function get(kind, id) {
+    const idKey = kind === "monsters" ? "monsterId" : kind === "loot" ? "lootTableId" : "itemId";
+    return read(kind).find(r => r[idKey] === id) || null;
+  }
+  function save(kind, row) {
+    const idKey = kind === "monsters" ? "monsterId" : kind === "loot" ? "lootTableId" : "itemId";
+    const rows = read(kind);
+    if (!row[idKey]) row[idKey] = newId(kind === "monsters" ? "mon" : kind === "loot" ? "lt" : "itm");
+    const i = rows.findIndex(r => r[idKey] === row[idKey]);
+    row.updatedAt = Date.now();
+    if (i >= 0) rows[i] = row; else { row.createdAt = Date.now(); rows.push(row); }
+    write(kind, rows);
+    return row;
+  }
+  function remove(kind, id) {
+    const idKey = kind === "monsters" ? "monsterId" : kind === "loot" ? "lootTableId" : "itemId";
+    write(kind, read(kind).filter(r => r[idKey] !== id));
+  }
+  function replaceAll(kind, rows) { return write(kind, rows || []); }
+
+  /* ------------------------------------------------------------- blank rows */
+  function blankMonster() {
+    return {
+      monsterId: "", name: "", icon: "👹", type: "beast", rarity: "common", isBoss: false,
+      levelMin: 1, levelMax: 3,
+      baseHp: 30, armor: 3,
+      attackName: "Strike", attackMin: 4, attackMax: 8, damageType: "physical",
+      expReward: 80, goldReward: 20,
+      lootTableId: ""
+    };
+  }
+  function blankLootTable() {
+    return { lootTableId: "", name: "", loot: [], chances: [], dropsMin: 0, dropsMax: 2 };
+  }
+  function blankItem() {
+    return {
+      itemId: "", name: "", gearType: "sword", iconKey: "sword", rarity: "common",
+      damageType: "slashing", damageMin: 3, damageMax: 6,
+      armor: 0, resistance: 0,
+      restoreHp: 0, restoreMana: 0, restoreStamina: 0,
+      itemLevel: 1, value: 20, description: ""
+    };
+  }
+
+  /** Consumables carry their restore amounts as three plain fields. */
+  function restoreOf(def) {
+    const r = {};
+    if (+def.restoreHp)      r.hp = +def.restoreHp;
+    if (+def.restoreMana)    r.mana = +def.restoreMana;
+    if (+def.restoreStamina) r.stamina = +def.restoreStamina;
+    return Object.keys(r).length ? r : null;
+  }
+
+  /* --------------------------------------------------------- loot resolution
+     Percentages are exactly what you typed: each entry is rolled on its own,
+     nothing is normalised. dropsMin / dropsMax then clamp the result — a
+     surplus is trimmed at random, a shortfall is topped up by drawing from
+     the remaining entries weighted by their own chance. */
+  function rollLoot(tableId, opts) {
+    opts = opts || {};
+    const t = get("loot", tableId);
+    if (!t || !t.loot || !t.loot.length) return [];
+    const luckBonus = (opts.luck || 0) * 0.35;   // percentage points, not a multiplier
+    const won = [], lost = [];
+
+    t.loot.forEach((itemId, i) => {
+      const pct = Number(t.chances[i]) || 0;
+      if (Math.random() * 100 < pct + luckBonus) won.push({ itemId, pct });
+      else lost.push({ itemId, pct });
+    });
+
+    const min = Math.max(0, Number(t.dropsMin) || 0);
+    const max = Math.max(min, Number(t.dropsMax) != null ? Number(t.dropsMax) : min);
+
+    while (won.length > max) won.splice(Math.floor(Math.random() * won.length), 1);
+    while (won.length < min && lost.length) {
+      const total = lost.reduce((s, e) => s + Math.max(0.0001, e.pct), 0);
+      let r = Math.random() * total, k = 0;
+      for (; k < lost.length; k++) { r -= Math.max(0.0001, lost[k].pct); if (r <= 0) break; }
+      won.push(lost.splice(Math.min(k, lost.length - 1), 1)[0]);
+    }
+    return won.map(w => w.itemId);
+  }
+
+  /* ------------------------------------------- authored row -> game instance */
+  function toGameItem(def, level) {
+    if (typeof def === "string") def = get("items", def);
+    if (!def) return null;
+    const slot = slotDef(def.gearType);
+    const dmgMin = +def.damageMin || 0, dmgMax = +def.damageMax || 0;
+    const stats = {};
+    if (slot.gameType === "weapon") stats.damage = Math.max(1, Math.round((dmgMin + dmgMax) / 2));
+    if (+def.armor) stats.defense = +def.armor;
+    if (+def.resistance) stats.resistance = +def.resistance;
+
+    const restore = restoreOf(def);
+    const parts = [];
+    if (stats.damage) parts.push(dmgMin + "–" + dmgMax + " " + def.damageType);
+    if (stats.defense) parts.push("+" + stats.defense + " DEF");
+    if (stats.resistance) parts.push("+" + stats.resistance + " RES");
+    if (restore) for (const k in restore) parts.push("+" + restore[k] + " " + k.toUpperCase());
+
+    return {
+      itemId: newId("inst"), defId: def.itemId, name: def.name,
+      type: slot.gameType === "consumable" || slot.gameType === "quest" ? "potion" : slot.gameType,
+      gearType: def.gearType, iconKey: def.iconKey, icon: null,
+      rarity: def.rarity, level: +def.itemLevel || level || 1,
+      damageType: def.damageType, dmgMin, dmgMax,
+      stats, restore,
+      effect: parts.join("  ") || (def.description ? "" : "No bonuses"),
+      description: def.description || "",
+      price: +def.value || 10, quantity: 1, authored: true
+    };
+  }
+
+  /**
+   * Turn an authored monster into the enemy shape the combat engine expects.
+   * Level is drawn from the authored range, nudged by how hard the node is.
+   */
+  function toEnemy(def, nodeDifficulty, playerLevel) {
+    const eff = effective(def);
+    const lo = Math.min(+def.levelMin || 1, +def.levelMax || 1);
+    const hi = Math.max(+def.levelMin || 1, +def.levelMax || 1);
+    const want = Math.round(((nodeDifficulty || 1) * 0.85 + (playerLevel || 1) * 0.28));
+    const level = Math.max(lo, Math.min(hi, want || lo));
+    // Authored numbers describe the monster at the BOTTOM of its level band.
+    // It then gains 15% per level above that, so a level-20 specimen of a
+    // 12–20 monster is roughly twice the level-12 one.
+    const growth = 1 + Math.max(0, level - lo) * 0.15;
+
+    const hp = Math.max(1, Math.round(eff.hp * growth));
+    const atkMin = Math.max(1, Math.round(eff.atkMin * growth));
+    const atkMax = Math.max(atkMin, Math.round(eff.atkMax * growth));
+    const magic = MAGIC_DAMAGE.indexOf(def.damageType) >= 0;
+
+    return {
+      enemyId: newId("enm"), defId: def.monsterId,
+      name: def.name, icon: def.icon || "👹",
+      level, boss: !!def.isBoss, authored: true,
+      monsterType: def.type, rarity: def.rarity,
+      attackName: def.attackName || "Strike", damageType: def.damageType,
+      hp, maxHp: hp, alive: true, tempEvasion: 0, slowed: 0,
+      attributes: {
+        strength: Math.round(atkMax * 0.9), dexterity: Math.round(6 + level * 1.1),
+        constitution: Math.round(hp / 8), intelligence: magic ? Math.round(atkMax * 0.8) : 6,
+        wisdom: Math.round(5 + level * 0.7), charisma: 8, luck: 8
+      },
+      // The engine reads atkMin/atkMax in preference to attackPower, so the
+      // authored range is what actually lands, before mitigation.
+      atkMin, atkMax,
+      attackPower: (atkMin + atkMax) / 2,
+      spellPower:  (atkMin + atkMax) / 2,
+      armor: eff.armor,
+      magicDefense: Math.round(eff.armor * 0.8 + level * 1.2),
+      accuracy: 74 + level * 1.1,
+      evasion: 4 + level * 0.9,
+      critChance: 4 + (RARITY[def.rarity] || RARITY.common).order * 2,
+      critResist: level * 0.5,
+      caster: magic,
+      lootTableId: def.lootTableId || "",
+      lootRolls: eff.lootRolls,
+      rewards: { experience: eff.exp, gold: eff.gold, items: [] }
+    };
+  }
+
+  /** Authored monsters that fit this node, or [] to fall back to the built-ins. */
+  function monstersFor(node, playerLevel) {
+    const all = read("monsters").filter(m => m.name);
+    if (!all.length) return [];
+    const want = Math.round(((node.difficulty || 1) * 0.85 + (playerLevel || 1) * 0.28)) || 1;
+    const boss = node.type === "boss";
+    let pool = all.filter(m => !!m.isBoss === boss &&
+      want >= (+m.levelMin || 1) - 1 && want <= (+m.levelMax || 99) + 1);
+    if (!pool.length) pool = all.filter(m => !!m.isBoss === boss);
+    if (!pool.length) pool = all;
+    return pool;
+  }
+
+  /* ------------------------------------------------------------ import/export */
+  function exportAll() {
+    return {
+      format: "stride-and-sword.content",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      config: config(),
+      tables: { monsters: read("monsters"), loot: read("loot"), items: read("items") }
+    };
+  }
+  function importAll(json, mode) {
+    if (!json || !json.tables) return { success: false, message: "Not a content file." };
+    ["monsters", "loot", "items"].forEach(kind => {
+      const incoming = json.tables[kind] || [];
+      if (mode === "replace") { write(kind, incoming); return; }
+      const idKey = kind === "monsters" ? "monsterId" : kind === "loot" ? "lootTableId" : "itemId";
+      const rows = read(kind);
+      incoming.forEach(row => {
+        const i = rows.findIndex(r => r[idKey] === row[idKey]);
+        if (i >= 0) rows[i] = row; else rows.push(row);
+      });
+      write(kind, rows);
+    });
+    if (json.config) saveConfig(json.config);
+    return { success: true,
+             monsters: read("monsters").length, loot: read("loot").length, items: read("items").length };
+  }
+
+  function stats() {
+    return { monsters: read("monsters").length, loot: read("loot").length, items: read("items").length };
+  }
+  function isEmpty() { const s = stats(); return !s.monsters && !s.loot && !s.items; }
+  function clearAll() { ["monsters", "loot", "items"].forEach(k => Store.remove(KEYS[k])); }
+
+  return {
+    KEYS, RARITY, RARITY_ORDER, DEFAULT_SCALE, MONSTER_TYPES, DAMAGE_TYPES, MAGIC_DAMAGE,
+    GEAR_SLOTS, ICONS, ICON_KEYS,
+    config, saveConfig, scaleOf, effective,
+    iconSvg, itemIconHtml, rarityColor, rarityName, slotDef, newId,
+    list, get, save, remove, replaceAll,
+    blankMonster, blankLootTable, blankItem,
+    rollLoot, toGameItem, toEnemy, monstersFor,
+    exportAll, importAll, stats, isEmpty, clearAll
+  };
+})();
+
+/* ==========================================================================
+   SEED — the game's original hardcoded content, expressed as editable rows.
+   Installed once, on first run, only when all three tables are empty.
+   Target numbers below are the *effective* values the game used to have;
+   they are divided by the rarity multiplier so authoring a Rare monster and
+   the old Rare monster come out at the same strength.
+   ========================================================================== */
+const ContentSeed = (function () {
+
+
+  const ITEMS = [
+    // key,            name,                   slot,      rarity,      dmg,     armor, res, lvl, value, damageType,  description
+    ["shortsword",   "Shortsword",             "sword",    "common",    [4, 8],   0,  0,  1,  24, "slashing",  "Standard issue, standard results."],
+    ["longsword",    "Longsword",              "sword",    "uncommon",  [6, 11],  0,  0,  3,  60, "slashing",  "Long enough to keep trouble at arm's length."],
+    ["rapier",       "Rapier",                 "sword",    "uncommon",  [5, 10],  0,  0,  3,  58, "piercing",  "Precise, and smug about it."],
+    ["waraxe",       "War Axe",                "axe",      "uncommon",  [8, 14],  0,  0,  4,  72, "slashing",  "Settles arguments in one swing."],
+    ["dagger",       "Dagger",                 "dagger",   "common",    [3, 7],   0,  0,  1,  18, "piercing",  "Quiet, quick, deniable."],
+    ["mace",         "Iron Mace",              "mace",     "common",    [5, 10],  0,  0,  2,  30, "blunt",     "No edge to dull."],
+    ["spear",        "Corridor Pike",          "spear",    "rare",      [9, 15],  0,  0,  6, 140, "piercing",  "Reach beats speed in a narrow hallway."],
+    ["bow",          "Recurve Bow",            "bow",      "rare",      [7, 16],  0,  0,  6, 155, "piercing",  "Best used before anything notices you."],
+    ["oakstaff",     "Oak Staff",              "staff",    "common",    [3, 6],   0,  4,  1,  26, "arcane",    "Warm to the touch, for no reason anyone can name."],
+    ["runewand",     "Rune Wand",              "wand",     "uncommon",  [4, 9],   0,  6,  3,  66, "arcane",    "Fits in a pocket. Empties a corridor."],
+    ["paddedvest",   "Padded Vest",            "chest",    "common",    [0, 0],   4,  0,  1,  22, "physical",  "Better than nothing, marginally."],
+    ["leathercoat",  "Leather Coat",           "chest",    "uncommon",  [0, 0],   6,  1,  3,  55, "physical",  "Broken in by someone who is no longer here."],
+    ["chainhauberk", "Chain Hauberk",          "chest",    "rare",      [0, 0],   9,  2,  6, 130, "physical",  "Loud, heavy, worth it."],
+    ["platecuirass", "Plate Cuirass",          "chest",    "epic",      [0, 0],  12,  3, 10, 300, "physical",  "Turns a killing blow into a bad morning."],
+    ["silkrobe",     "Silk Robe",              "clothing", "uncommon",  [0, 0],   3,  8,  3,  70, "arcane",    "Threadbare against blades, excellent against spells."],
+    ["helm",         "Dented Helm",            "helm",     "common",    [0, 0],   3,  0,  1,  20, "physical",  "The dent was there when you found it."],
+    ["shoulder",     "Iron Pauldrons",         "shoulder", "uncommon",  [0, 0],   4,  1,  4,  62, "physical",  "Carries weight so your back doesn't."],
+    ["gloves",       "Work Gauntlets",         "gloves",   "common",    [0, 0],   2,  0,  1,  16, "physical",  "Grip first, protection second."],
+    ["belt",         "Toolbelt of Holding",    "belt",     "rare",      [0, 0],   2,  3,  6, 145, "physical",  "Deeper than it has any right to be."],
+    ["legs",         "Riveted Greaves",        "legs",     "uncommon",  [0, 0],   5,  0,  4,  64, "physical",  "For walking, mostly."],
+    ["boots",        "Long-Mile Boots",        "boots",    "rare",      [0, 0],   3,  2,  6, 150, "physical",  "The soles never seem to wear down."],
+    ["cloak",        "Stairwell Cloak",        "cloak",    "epic",      [0, 0],   3,  9, 10, 320, "shadow",    "Shadows fold toward it."],
+    ["shield",       "Heater Shield",          "shield",   "uncommon",  [0, 0],   8,  1,  4,  80, "physical",  "A door you can carry."],
+    ["ring",         "Copper Band",            "ring",     "common",    [0, 0],   0,  1,  1,  25, "physical",  "Turns your finger green. Probably harmless."],
+    ["amulet",       "Owl Charm",              "amulet",   "rare",      [0, 0],   0,  6,  6, 160, "arcane",    "You notice things a half-second sooner."],
+    ["gem",          "Fluorescent Shard",      "gem",      "legendary", [0, 0],   2, 12, 14, 800, "lightning", "Hums at the exact pitch of a dying ceiling light."],
+    ["scroll",       "Scroll of Second Wind",  "scroll",   "rare",      [0, 0],   0,  0,  5, 120, "holy",      "One good breath when you need it most."],
+    ["tome",         "Ledger of Small Debts",  "tome",     "epic",      [0, 0],   0,  4, 10, 400, "shadow",    "Every name in it is owed something."],
+    ["potion_hp_s",  "Minor Healing Draught",  "potion",   "common",    [0, 0],   0,  0,  1,  25, "holy",      "Tastes of iron and mint."],
+    ["potion_hp_l",  "Greater Healing Draught","potion",   "uncommon",  [0, 0],   0,  0,  5,  70, "holy",      "Thick, and worth every swallow."],
+    ["potion_mp",    "Vial of Blue Ink",       "potion",   "common",    [0, 0],   0,  0,  2,  30, "arcane",    "Definitely not ink."],
+    ["potion_sp",    "Bitter Coffee",          "potion",   "common",    [0, 0],   0,  0,  1,  18, "physical",  "Burnt at 6am, still going."],
+    ["potion_full",  "Second Wind",            "potion",   "rare",      [0, 0],   0,  0,  8, 110, "holy",      "Everything at once, briefly."]
+  ];
+
+  const RESTORES = {
+    potion_hp_s:  { hp: 45 },
+    potion_hp_l:  { hp: 120 },
+    potion_mp:    { mana: 40 },
+    potion_sp:    { stamina: 60 },
+    potion_full:  { hp: 80, mana: 40, stamina: 60 },
+    scroll:       { hp: 60, stamina: 40 }
+  };
+
+  /* name, icon, type, rarity, boss, [lvlMin,lvlMax], baseHp, armour,
+     attackName, [atkMin,atkMax], damageType, xp, gold, lootKey
+
+     These are BASE numbers, describing the monster at the bottom of its level
+     band before its rarity multiplier. They were derived from the original
+     hardcoded bestiary by tools/calibrate.js, so seeding the editor reproduces
+     the difficulty curve the game was tuned to rather than quietly changing it.
+     Re-run that script if the built-in fallback bestiary is ever retuned. */
+  const MONSTERS = [
+    ["Loose Stapler Swarm",  "📎", "construct", "common",    false, [1, 4],    22,  4, "Snapping Bite",    [12, 15],  "piercing",    55,  12, "vermin"],
+    ["Break Room Rat",       "🐀", "beast",     "common",    false, [1, 4],    26,  5, "Gnaw",             [13, 18],  "piercing",    60,  14, "vermin"],
+    ["Goblin Intern",        "👺", "humanoid",  "common",    false, [1, 5],    34,  6, "Stapler Swing",    [14, 19],  "blunt",       85,  22, "vermin"],
+    ["Filing Cabinet Mimic", "🗄️", "aberration","uncommon",  false, [3, 8],    64, 13, "Drawer Slam",      [22, 29],  "blunt",      135,  40, "office"],
+    ["Corridor Wisp",        "👻", "spirit",    "uncommon",  false, [3, 8],    48,  8, "Cold Whisper",     [19, 25],  "arcane",     145,  35, "office"],
+    ["Vending Golem",        "🤖", "construct", "uncommon",  false, [4, 9],    93, 16, "Coin Return",      [28, 37],  "lightning",  187,  62, "office"],
+    ["Stairwell Stalker",    "🕷️", "beast",     "rare",      false, [7, 14],   89, 16, "Ambush",           [40, 53],  "slashing",   227,  66, "deep"],
+    ["Parking Lot Wraith",   "💀", "undead",    "rare",      false, [7, 14],  108, 18, "Grasp of the Lot", [40, 53],  "shadow",     262,  82, "deep"],
+    ["Hoarding Kobold",      "🦎", "humanoid",  "rare",      false, [7, 15],   94, 18, "Snatch and Bite",  [40, 53],  "piercing",   237, 101, "deep"],
+    ["Fluorescent Horror",   "🦇", "aberration","epic",      false, [12, 20], 165, 29, "Flicker",          [60, 79],  "shadow",     347, 123, "executive"],
+    ["Quarterly Review",     "📊", "aberration","epic",      false, [12, 22], 195, 33, "Performance Note", [60, 80],  "arcane",     408, 151, "executive"],
+    ["The Facilities Manager","👔","humanoid",  "rare",      true,  [5, 10],  210, 20, "Keyring Flail",    [38, 50],  "blunt",      760, 284, "office"],
+    ["Ancient Copier, Awoken","🖨️","construct", "epic",      true,  [10, 18], 346, 33, "Toner Cloud",      [55, 73],  "poison",    1163, 436, "deep"],
+    ["Warden of the Skyway", "🐉", "dragon",    "legendary", true,  [16, 30], 525, 45, "Skyway Breath",    [83, 110], "fire",      1704, 650, "executive"]
+  ];
+
+  /* key, name, dropsMin, dropsMax, [[itemKey, chance], ...] */
+  const LOOT = [
+    ["vermin", "Vermin Scraps", 0, 2, [
+      ["potion_sp", 30], ["dagger", 12], ["shortsword", 8], ["gloves", 10],
+      ["helm", 6], ["ring", 4], ["potion_hp_s", 18]
+    ]],
+    ["office", "Office Salvage", 1, 3, [
+      ["potion_hp_s", 35], ["potion_mp", 20], ["leathercoat", 12], ["shield", 10],
+      ["longsword", 9], ["rapier", 8], ["runewand", 7], ["shoulder", 8],
+      ["legs", 8], ["waraxe", 6], ["silkrobe", 5]
+    ]],
+    ["deep", "Deep Floor Cache", 1, 3, [
+      ["potion_hp_l", 30], ["chainhauberk", 12], ["boots", 10], ["belt", 10],
+      ["spear", 9], ["bow", 9], ["amulet", 8], ["potion_full", 12], ["scroll", 7]
+    ]],
+    ["executive", "Executive Hoard", 2, 4, [
+      ["platecuirass", 14], ["cloak", 12], ["tome", 10], ["gem", 4],
+      ["potion_full", 40], ["amulet", 18], ["boots", 16], ["belt", 16], ["scroll", 20]
+    ]]
+  ];
+
+  function build() {
+    const scale = Content.config().scale;
+    const itemIdOf = {}, lootIdOf = {};
+
+    const items = ITEMS.map(row => {
+      const [key, name, slot, rarity, dmg, armor, res, lvl, value, dtype, desc] = row;
+      const id = "itm_seed_" + key;
+      itemIdOf[key] = id;
+      const r = RESTORES[key] || {};
+      return {
+        itemId: id, name, gearType: slot, iconKey: Content.slotDef(slot).icon,
+        rarity, damageType: dtype, damageMin: dmg[0], damageMax: dmg[1],
+        armor, resistance: res,
+        restoreHp: r.hp || 0, restoreMana: r.mana || 0, restoreStamina: r.stamina || 0,
+        itemLevel: lvl, value, description: desc,
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+    });
+
+    const loot = LOOT.map(([key, name, dmin, dmax, entries]) => {
+      const id = "lt_seed_" + key;
+      lootIdOf[key] = id;
+      return {
+        lootTableId: id, name, dropsMin: dmin, dropsMax: dmax,
+        loot: entries.map(e => itemIdOf[e[0]]),
+        chances: entries.map(e => e[1]),
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+    });
+
+    const monsters = MONSTERS.map(row => {
+      const [name, icon, type, rarity, isBoss, lvl, hp, armor, attackName, atk, dtype, xp, gold, lootKey] = row;
+      return {
+        monsterId: "mon_seed_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+        name, icon, type, rarity, isBoss,
+        levelMin: lvl[0], levelMax: lvl[1],
+        baseHp: hp, armor: armor,
+        attackName, attackMin: atk[0], attackMax: atk[1],
+        damageType: dtype,
+        expReward: xp, goldReward: gold,
+        lootTableId: lootIdOf[lootKey] || "",
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+    });
+
+    return { items, loot, monsters };
+  }
+
+  return {
+    build,
+    /** Install once. Never overwrites anything a person has authored. */
+    install(force) {
+      if (!force && !Content.isEmpty()) return { seeded: false };
+      const b = build();
+      Content.replaceAll("items", b.items);
+      Content.replaceAll("loot", b.loot);
+      Content.replaceAll("monsters", b.monsters);
+      return { seeded: true, items: b.items.length, loot: b.loot.length, monsters: b.monsters.length };
+    }
+  };
+})();
+/* ==========================================================================
+   CONTENT EDITOR
+   Three CRUD screens over the shared Content tables, plus a Rarity screen for
+   the multipliers that scale every monster. Writes to the same localStorage
+   the game reads, so a save here is live in the game on its next encounter.
+   ========================================================================== */
+const Ed = {
+  tab: "monsters",
+  selected: null,       // id of the row being edited
+  draft: null,          // working copy; only written on Save
+  isNew: false,
+  search: "",
+  sort: {
+    monsters: { col: "name", dir: 1 },
+    loot:     { col: "name", dir: 1 },
+    items:    { col: "name", dir: 1 }
+  },
+
+  /* ------------------------------------------------------------------ boot */
+  init() {
+    this.root = $("#ed");
+    this.root.innerHTML =
+      '<header class="edTop">' +
+        '<div class="edBrand"><b>Stride &amp; Sword</b><span>Content Editor</span></div>' +
+        '<nav class="edTabs" id="edTabs"></nav>' +
+        '<div class="spacer"></div>' +
+        '<button class="btn ghost sm" id="edSeed">Seed defaults</button>' +
+        '<button class="btn ghost sm" id="edImport">Import</button>' +
+        '<button class="btn ghost sm" id="edExport">Export JSON</button>' +
+        '<a class="btn sm" id="edPlay" href="index.html">Open game →</a>' +
+      "</header>" +
+      '<div class="edBody">' +
+        '<section class="edList">' +
+          '<div class="listBar" id="edListBar"></div>' +
+          '<div class="listWrap" id="edListWrap"></div>' +
+        "</section>" +
+        '<aside class="edForm" id="edForm"></aside>' +
+      "</div>" +
+      '<footer class="edStatus" id="edStatus"></footer>';
+
+    $("#edSeed").onclick   = () => this.seed();
+    $("#edExport").onclick = () => this.exportJson();
+    $("#edImport").onclick = () => this.importJson();
+
+    // First run with nothing authored: install the game's original content so
+    // there is something to look at rather than three empty tables.
+    if (Content.isEmpty()) ContentSeed.install();
+
+    this.renderAll();
+  },
+
+  setTab(t) {
+    if (this.dirtyCheck()) return;
+    this.tab = t; this.selected = null; this.draft = null; this.isNew = false; this.search = "";
+    this.renderAll();
+  },
+
+  /** Warn once before throwing away edits. Returns true to cancel navigation. */
+  dirtyCheck() {
+    if (!this.draft) return false;
+    const original = this.isNew ? null : Content.get(this.tab, this.selected);
+    if (original && JSON.stringify(original) === JSON.stringify(this.draft)) return false;
+    if (this.isNew && !this.draft.name) return false;
+    return !confirm("Discard unsaved changes?");
+  },
+
+  renderAll() {
+    this.renderTabs();
+    this.renderListBar();
+    this.renderList();
+    this.renderForm();
+    this.renderStatus();
+    $("#edForm").classList.toggle("hidden", this.tab === "rarity");
+  },
+
+  renderTabs() {
+    const s = Content.stats();
+    const tabs = [
+      ["monsters", "Monsters", s.monsters],
+      ["loot", "Loot Tables", s.loot],
+      ["items", "Items", s.items],
+      ["rarity", "Rarity", null]
+    ];
+    const host = $("#edTabs");
+    host.innerHTML = tabs.map(([k, label, n]) =>
+      '<button data-tab="' + k + '" class="' + (this.tab === k ? "on" : "") + '">' + label +
+      (n != null ? '<span class="n">' + n + "</span>" : "") + "</button>").join("");
+    $$("[data-tab]", host).forEach(b => { b.onclick = () => this.setTab(b.getAttribute("data-tab")); });
+  },
+
+  renderListBar() {
+    const bar = $("#edListBar");
+    if (this.tab === "rarity") {
+      bar.innerHTML = '<b style="font-size:13px">Rarity tiers &amp; monster scaling</b>' +
+        '<div class="spacer"></div>' +
+        '<button class="btn ghost sm" id="edResetScale">Reset to defaults</button>';
+      $("#edResetScale").onclick = () => {
+        if (!confirm("Reset every multiplier to its default?")) return;
+        Content.saveConfig({ scale: JSON.parse(JSON.stringify(Content.DEFAULT_SCALE)) });
+        this.renderAll(); this.toast("Multipliers reset.", "good");
+      };
+      return;
+    }
+    const noun = { monsters: "monster", loot: "loot table", items: "item" }[this.tab];
+    bar.innerHTML =
+      '<input class="input" id="edSearch" placeholder="Search ' + noun + 's…" value="' + esc(this.search) + '">' +
+      '<div class="spacer"></div>' +
+      '<span class="tiny dimmer" id="edCount"></span>' +
+      '<button class="btn primary sm" id="edNew">+ New ' + noun + "</button>";
+    const inp = $("#edSearch");
+    inp.oninput = () => { this.search = inp.value; this.renderList(); };
+    $("#edNew").onclick = () => this.newRow();
+  },
+
+  rows() {
+    const all = Content.list(this.tab);
+    const q = this.search.trim().toLowerCase();
+    const filtered = !q ? all.slice() : all.filter(r =>
+      (r.name || "").toLowerCase().includes(q) ||
+      (r.type || "").toLowerCase().includes(q) ||
+      (r.gearType || "").toLowerCase().includes(q) ||
+      (r.rarity || "").toLowerCase().includes(q));
+    const s = this.sort[this.tab];
+    const val = (r) => {
+      const v = this.sortValue(r, s.col);
+      return v == null ? "" : v;
+    };
+    filtered.sort((a, b) => {
+      const av = val(a), bv = val(b);
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * s.dir;
+      return String(av).localeCompare(String(bv)) * s.dir;
+    });
+    return filtered;
+  },
+
+  sortValue(r, col) {
+    if (col === "rarity") return (Content.RARITY[r.rarity] || {}).order || 0;
+    if (col === "level")  return +r.levelMin || 0;
+    if (col === "hp")     return Content.effective(r).hp;
+    if (col === "exp")    return Content.effective(r).exp;
+    if (col === "entries")return (r.loot || []).length;
+    if (col === "value")  return +r.value || 0;
+    if (col === "armor")  return +r.armor || 0;
+    return r[col];
+  },
+
+  th(col, label, cls) {
+    const s = this.sort[this.tab];
+    const arrow = s.col === col ? ' <span class="ar">' + (s.dir > 0 ? "▲" : "▼") + "</span>" : "";
+    return '<th class="' + (cls || "") + '" data-sort="' + col + '">' + label + arrow + "</th>";
+  },
+
+  renderList() {
+    const wrap = $("#edListWrap");
+    if (this.tab === "rarity") { this.renderRarity(wrap); return; }
+
+    const rows = this.rows();
+    const cnt = $("#edCount");
+    if (cnt) cnt.textContent = rows.length + " of " + Content.list(this.tab).length;
+
+    let head = "", body = "";
+    if (this.tab === "monsters") {
+      head = this.th("name", "Name") + this.th("type", "Type") + this.th("rarity", "Rarity") +
+             this.th("level", "Levels", "num") + this.th("hp", "HP", "num") +
+             "<th class='num'>Attack</th>" + this.th("exp", "XP", "num") + "<th>Loot table</th>";
+      body = rows.map(m => {
+        const e = Content.effective(m);
+        const lt = m.lootTableId ? Content.get("loot", m.lootTableId) : null;
+        return '<tr data-id="' + m.monsterId + '" class="' + (this.selected === m.monsterId ? "on" : "") + '">' +
+          '<td><div class="nameCell"><span class="emojiIcon">' + esc(m.icon || "👹") + "</span>" +
+            "<b>" + esc(m.name || "(unnamed)") + "</b>" +
+            (m.isBoss ? ' <span class="tag" style="border-color:var(--gold);color:var(--gold)">boss</span>' : "") +
+            "</div></td>" +
+          '<td><span class="tag">' + esc(m.type) + "</span></td>" +
+          "<td>" + this.rarityChip(m.rarity) + "</td>" +
+          '<td class="num">' + m.levelMin + "–" + m.levelMax + "</td>" +
+          '<td class="num">' + e.hp + "</td>" +
+          '<td class="num">' + e.atkMin + "–" + e.atkMax + "</td>" +
+          '<td class="num">' + e.exp + "</td>" +
+          "<td>" + (lt ? esc(lt.name) : '<span class="dimmer">—</span>') + "</td></tr>";
+      }).join("");
+
+    } else if (this.tab === "loot") {
+      head = this.th("name", "Name") + this.th("entries", "Entries", "num") +
+             "<th class='num'>Total %</th><th class='num'>Drops</th><th>Contains</th>";
+      body = rows.map(t => {
+        const total = (t.chances || []).reduce((s, c) => s + (+c || 0), 0);
+        const names = (t.loot || []).slice(0, 3).map(id => {
+          const it = Content.get("items", id);
+          return it ? esc(it.name) : "?";
+        }).join(", ");
+        const more = (t.loot || []).length > 3 ? " +" + ((t.loot || []).length - 3) : "";
+        return '<tr data-id="' + t.lootTableId + '" class="' + (this.selected === t.lootTableId ? "on" : "") + '">' +
+          "<td><b>" + esc(t.name || "(unnamed)") + "</b></td>" +
+          '<td class="num">' + (t.loot || []).length + "</td>" +
+          '<td class="num">' + total.toFixed(1) + "</td>" +
+          '<td class="num">' + t.dropsMin + "–" + t.dropsMax + "</td>" +
+          '<td class="dim">' + names + more + "</td></tr>";
+      }).join("");
+
+    } else {
+      head = this.th("name", "Name") + this.th("gearType", "Slot") + this.th("rarity", "Rarity") +
+             "<th class='num'>Damage</th>" + this.th("armor", "Armour", "num") +
+             "<th class='num'>Res</th>" + this.th("itemLevel", "Lvl", "num") + this.th("value", "Value", "num");
+      body = rows.map(it => {
+        const slot = Content.slotDef(it.gearType);
+        const dmg = (+it.damageMin || +it.damageMax)
+          ? it.damageMin + "–" + it.damageMax : '<span class="dimmer">—</span>';
+        return '<tr data-id="' + it.itemId + '" class="' + (this.selected === it.itemId ? "on" : "") + '">' +
+          '<td><div class="nameCell"><span class="iconBox" style="color:' + Content.rarityColor(it.rarity) + '">' +
+            Content.iconSvg(it.iconKey, 18) + "</span><b>" + esc(it.name || "(unnamed)") + "</b></div></td>" +
+          '<td><span class="tag">' + esc(slot.label) + "</span></td>" +
+          "<td>" + this.rarityChip(it.rarity) + "</td>" +
+          '<td class="num">' + dmg + "</td>" +
+          '<td class="num">' + (+it.armor || '<span class="dimmer">—</span>') + "</td>" +
+          '<td class="num">' + (+it.resistance || '<span class="dimmer">—</span>') + "</td>" +
+          '<td class="num">' + (it.itemLevel || 1) + "</td>" +
+          '<td class="num">' + (it.value || 0) + "</td></tr>";
+      }).join("");
+    }
+
+    wrap.innerHTML = rows.length
+      ? '<table class="grid"><thead><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table>"
+      : '<div class="emptyForm">Nothing here yet.<br>Use <b>+ New</b> to add one, or <b>Seed defaults</b> for the game\'s original content.</div>';
+
+    $$("tbody tr", wrap).forEach(tr => {
+      tr.onclick = () => this.select(tr.getAttribute("data-id"));
+    });
+    $$("th[data-sort]", wrap).forEach(th => {
+      th.onclick = () => {
+        const col = th.getAttribute("data-sort");
+        const s = this.sort[this.tab];
+        if (s.col === col) s.dir *= -1; else { s.col = col; s.dir = 1; }
+        this.renderList();
+      };
+    });
+  },
+
+  rarityChip(r) {
+    const d = Content.RARITY[r] || Content.RARITY.common;
+    return '<span class="rchip" style="color:' + d.color + '"><span class="rdot"></span>' + d.name + "</span>";
+  },
+
+  /* --------------------------------------------------------------- selection */
+  select(id) {
+    if (this.dirtyCheck()) return;
+    this.selected = id;
+    this.isNew = false;
+    const row = Content.get(this.tab, id);
+    this.draft = row ? JSON.parse(JSON.stringify(row)) : null;
+    this.renderList();
+    this.renderForm();
+  },
+
+  newRow() {
+    if (this.dirtyCheck()) return;
+    this.draft = this.tab === "monsters" ? Content.blankMonster()
+               : this.tab === "loot" ? Content.blankLootTable()
+               : Content.blankItem();
+    this.selected = null;
+    this.isNew = true;
+    this.renderList();
+    this.renderForm();
+    setTimeout(() => { const n = $("#f_name"); if (n) n.focus(); }, 30);
+  },
+
+  /* -------------------------------------------------------------------- save */
+  save() {
+    const d = this.draft;
+    const problem = this.validate(d);
+    if (problem) { $("#edErr").textContent = problem; return; }
+    const idKey = this.tab === "monsters" ? "monsterId" : this.tab === "loot" ? "lootTableId" : "itemId";
+    const saved = Content.save(this.tab, d);
+    this.selected = saved[idKey];
+    this.isNew = false;
+    this.draft = JSON.parse(JSON.stringify(saved));
+    this.renderAll();
+    this.toast("Saved " + (saved.name || "row") + ".", "good");
+  },
+
+  validate(d) {
+    if (!d.name || !d.name.trim()) return "Give it a name.";
+    if (this.tab === "monsters") {
+      if (+d.levelMin > +d.levelMax) return "Minimum level is above the maximum.";
+      if (+d.attackMin > +d.attackMax) return "Minimum attack is above the maximum.";
+      if (+d.baseHp < 1) return "Base HP must be at least 1.";
+    }
+    if (this.tab === "items") {
+      if (+d.damageMin > +d.damageMax) return "Minimum damage is above the maximum.";
+    }
+    if (this.tab === "loot") {
+      if (+d.dropsMin > +d.dropsMax) return "Minimum drops is above the maximum.";
+      const bad = (d.chances || []).findIndex(c => !(+c >= 0) || +c > 100);
+      if (bad >= 0) return "Row " + (bad + 1) + " has a percentage outside 0–100.";
+      if ((d.loot || []).some(id => !id)) return "Every row needs an item selected.";
+    }
+    return null;
+  },
+
+  duplicate() {
+    const d = JSON.parse(JSON.stringify(this.draft));
+    const idKey = this.tab === "monsters" ? "monsterId" : this.tab === "loot" ? "lootTableId" : "itemId";
+    d[idKey] = "";
+    d.name = (d.name || "") + " (copy)";
+    this.draft = d;
+    this.selected = null;
+    this.isNew = true;
+    this.renderForm();
+    this.toast("Duplicated — save to keep it.");
+  },
+
+  del() {
+    const name = (this.draft && this.draft.name) || "this row";
+    if (!confirm("Delete " + name + "? This cannot be undone.")) return;
+    const id = this.selected;
+    Content.remove(this.tab, id);
+    // Clean up references so nothing points at a row that no longer exists.
+    if (this.tab === "loot") {
+      Content.list("monsters").forEach(m => {
+        if (m.lootTableId === id) { m.lootTableId = ""; Content.save("monsters", m); }
+      });
+    }
+    if (this.tab === "items") {
+      Content.list("loot").forEach(t => {
+        const keep = [], keepC = [];
+        (t.loot || []).forEach((iid, i) => { if (iid !== id) { keep.push(iid); keepC.push(t.chances[i]); } });
+        if (keep.length !== (t.loot || []).length) { t.loot = keep; t.chances = keepC; Content.save("loot", t); }
+      });
+    }
+    this.selected = null; this.draft = null; this.isNew = false;
+    this.renderAll();
+    this.toast("Deleted.", "bad");
+  },
+
+  /* ------------------------------------------------------------------ toast */
+  toast(msg, kind) {
+    let host = $("#toasts");
+    if (!host) { host = el("div"); host.id = "toasts"; document.body.appendChild(host); }
+    const t = el("div", "toast " + (kind || ""), esc(msg));
+    host.appendChild(t);
+    while (host.children.length > 3) host.removeChild(host.firstChild);
+    setTimeout(() => {
+      t.style.transition = "opacity .3s"; t.style.opacity = "0";
+      setTimeout(() => t.remove(), 320);
+    }, 2400);
+  },
+
+  renderStatus() {
+    const s = Content.stats();
+    const kb = (Store.usageBytes() / 1024).toFixed(1);
+    $("#edStatus").innerHTML =
+      "<span><b>" + s.monsters + "</b> monsters</span>" +
+      "<span><b>" + s.loot + "</b> loot tables</span>" +
+      "<span><b>" + s.items + "</b> items</span>" +
+      '<span class="spacer"></span>' +
+      "<span>" + (Store.isDurable ? "localStorage · " + kb + " KB" : "in-memory only — changes will not survive a reload") + "</span>";
+  }
+};
+
+/* ==========================================================================
+   FORMS
+   ========================================================================== */
+Object.assign(Ed, {
+
+  /* Bind an input to a key on the draft. `cast` converts the raw string. */
+  bind(id, key, cast, after) {
+    const n = $("#" + id);
+    if (!n) return;
+    const handler = () => {
+      const raw = n.type === "checkbox" ? n.checked : n.value;
+      this.draft[key] = cast ? cast(raw) : raw;
+      if (after) after();
+    };
+    n.addEventListener(n.type === "checkbox" || n.tagName === "SELECT" ? "change" : "input", handler);
+  },
+
+  num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; },
+  int(v) { const n = parseInt(v, 10); return isNaN(n) ? 0 : n; },
+
+  fld(id, label, value, opts) {
+    opts = opts || {};
+    return '<label class="f"><span>' + label + "</span>" +
+      '<input class="input" id="' + id + '" type="' + (opts.type || "text") + '"' +
+      (opts.step ? ' step="' + opts.step + '"' : "") +
+      (opts.min != null ? ' min="' + opts.min + '"' : "") +
+      (opts.max != null ? ' max="' + opts.max + '"' : "") +
+      (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : "") +
+      ' value="' + esc(value == null ? "" : value) + '"></label>';
+  },
+
+  sel(id, label, value, options) {
+    return '<label class="f"><span>' + label + "</span><select id=\"" + id + '">' +
+      options.map(o => {
+        const v = typeof o === "string" ? o : o.value;
+        const t = typeof o === "string" ? cap(o) : o.label;
+        return '<option value="' + esc(v) + '"' + (String(v) === String(value) ? " selected" : "") + ">" + esc(t) + "</option>";
+      }).join("") + "</select></label>";
+  },
+
+  raritySelect(id, value) {
+    return '<label class="f"><span>Rarity <em style="font-style:normal;color:' +
+      Content.rarityColor(value) + '">● ' + Content.rarityName(value) + "</em></span><select id=\"" + id + '">' +
+      Content.RARITY_ORDER.map(r => '<option value="' + r + '"' + (r === value ? " selected" : "") + ">" +
+        Content.RARITY[r].name + "</option>").join("") + "</select></label>";
+  },
+
+  formHeader(title) {
+    return '<div class="formHead"><h3>' + esc(title) + "</h3></div>";
+  },
+
+  formActions() {
+    return '<div class="err" id="edErr"></div>' +
+      '<div class="formActions">' +
+        '<button class="btn primary" id="edSave" style="flex:1">Save</button>' +
+        (this.isNew ? "" : '<button class="btn ghost" id="edDup">Duplicate</button>') +
+        (this.isNew ? "" : '<button class="btn danger" id="edDel">Delete</button>') +
+      "</div>";
+  },
+
+  wireActions() {
+    const s = $("#edSave"); if (s) s.onclick = () => this.save();
+    const d = $("#edDup");  if (d) d.onclick = () => this.duplicate();
+    const x = $("#edDel");  if (x) x.onclick = () => this.del();
+  },
+
+  renderForm() {
+    const host = $("#edForm");
+    if (this.tab === "rarity") { host.innerHTML = ""; return; }
+    if (!this.draft) {
+      const noun = { monsters: "monster", loot: "loot table", items: "item" }[this.tab];
+      host.innerHTML = '<div class="emptyForm">Select a ' + noun + " from the list,<br>or create a new one.</div>";
+      return;
+    }
+    if (this.tab === "monsters") this.monsterForm(host);
+    else if (this.tab === "loot") this.lootForm(host);
+    else this.itemForm(host);
+    this.wireActions();
+  },
+
+  /* ------------------------------------------------------------- monsters */
+  monsterForm(host) {
+    const d = this.draft;
+    const lootOptions = [{ value: "", label: "— none —" }]
+      .concat(Content.list("loot").map(t => ({ value: t.lootTableId, label: t.name })));
+
+    host.innerHTML =
+      this.formHeader(this.isNew ? "New monster" : d.name) +
+      '<div class="row2">' +
+        this.fld("f_name", "Name", d.name, { placeholder: "Break Room Rat" }) +
+        this.fld("f_icon", "Icon", d.icon, { placeholder: "🐀" }) +
+      "</div>" +
+      '<div class="row2">' +
+        this.sel("f_type", "Type", d.type, Content.MONSTER_TYPES) +
+        this.raritySelect("f_rarity", d.rarity) +
+      "</div>" +
+      '<label class="check"><input type="checkbox" id="f_isBoss"' + (d.isBoss ? " checked" : "") +
+        "> Boss — only spawns at boss sites</label>" +
+
+      '<div class="sect">Level range</div>' +
+      '<div class="row2">' +
+        this.fld("f_levelMin", "Level min", d.levelMin, { type: "number", min: 1 }) +
+        this.fld("f_levelMax", "Level max", d.levelMax, { type: "number", min: 1 }) +
+      "</div>" +
+
+      '<div class="sect">Base stats</div>' +
+      '<div class="row2">' +
+        this.fld("f_baseHp", "Base HP", d.baseHp, { type: "number", min: 1 }) +
+        this.fld("f_armor", "Armour", d.armor, { type: "number", min: 0 }) +
+      "</div>" +
+
+      '<div class="sect">Attack</div>' +
+      this.fld("f_attackName", "Attack name", d.attackName, { placeholder: "Gnaw" }) +
+      '<div class="row3">' +
+        this.fld("f_attackMin", "Min", d.attackMin, { type: "number", min: 0 }) +
+        this.fld("f_attackMax", "Max", d.attackMax, { type: "number", min: 0 }) +
+        this.sel("f_damageType", "Damage type", d.damageType, Content.DAMAGE_TYPES) +
+      "</div>" +
+
+      '<div class="sect">Rewards</div>' +
+      '<div class="row2">' +
+        this.fld("f_expReward", "Experience", d.expReward, { type: "number", min: 0 }) +
+        this.fld("f_goldReward", "Gold", d.goldReward, { type: "number", min: 0 }) +
+      "</div>" +
+      this.sel("f_lootTableId", "Loot table", d.lootTableId, lootOptions) +
+
+      '<div class="sect">After rarity scaling</div>' +
+      '<div class="preview" id="edPreview"></div>' +
+      this.formActions();
+
+    this.bind("f_name", "name", null, () => this.refreshPreview());
+    this.bind("f_icon", "icon");
+    this.bind("f_type", "type");
+    this.bind("f_rarity", "rarity", null, () => { this.renderForm(); });
+    this.bind("f_isBoss", "isBoss", Boolean);
+    ["levelMin", "levelMax", "baseHp", "armor", "attackMin", "attackMax", "expReward", "goldReward"]
+      .forEach(k => this.bind("f_" + k, k, this.int, () => this.refreshPreview()));
+    this.bind("f_attackName", "attackName");
+    this.bind("f_damageType", "damageType", null, () => this.refreshPreview());
+    this.bind("f_lootTableId", "lootTableId");
+    this.refreshPreview();
+  },
+
+  refreshPreview() {
+    const box = $("#edPreview");
+    if (!box || this.tab !== "monsters") return;
+    const d = this.draft;
+    const e = Content.effective(d);
+    const s = e.scale;
+    const line = (label, base, val, mult) =>
+      '<div class="pr"><span>' + label + "</span><span>" +
+        (mult !== 1 ? '<span class="was">' + base + " ×" + mult + "</span>" : "") +
+        "<b" + (mult !== 1 ? ' class="up"' : "") + ">" + val + "</b></span></div>";
+    const magic = Content.MAGIC_DAMAGE.indexOf(d.damageType) >= 0;
+    box.innerHTML =
+      line("Health", d.baseHp, e.hp, s.hp) +
+      line("Damage", d.attackMin + "–" + d.attackMax, e.atkMin + "–" + e.atkMax, s.dmg) +
+      line("Armour", d.armor, e.armor, s.armor) +
+      line("Experience", d.expReward, e.exp, s.exp) +
+      line("Gold", d.goldReward, e.gold, s.exp) +
+      '<div class="pr"><span>Extra loot rolls</span><b>' + s.lootRolls + "</b></div>" +
+      '<div class="pr"><span>Resolves against</span><b>' + (magic ? "magic defence" : "armour") + "</b></div>";
+  },
+
+  /* ----------------------------------------------------------- loot tables */
+  lootForm(host) {
+    const d = this.draft;
+    if (!d.loot) d.loot = [];
+    if (!d.chances) d.chances = [];
+
+    host.innerHTML =
+      this.formHeader(this.isNew ? "New loot table" : d.name) +
+      this.fld("f_name", "Name", d.name, { placeholder: "Office Salvage" }) +
+      '<div class="sect">Drop count</div>' +
+      '<div class="row2">' +
+        this.fld("f_dropsMin", "Minimum drops", d.dropsMin, { type: "number", min: 0 }) +
+        this.fld("f_dropsMax", "Maximum drops", d.dropsMax, { type: "number", min: 0 }) +
+      "</div>" +
+      '<div class="sect">Entries</div>' +
+      '<div id="edLootRows"></div>' +
+      '<button class="btn ghost block sm" id="edAddLoot" style="margin-top:6px">+ Add entry</button>' +
+      '<div class="lootSum" id="edLootSum"></div>' +
+      '<div class="noteBox">Each percentage is rolled on its own and is never ' +
+        "normalised — a table can total 12% or 900%. The drop count then clamps the result: " +
+        "a surplus is trimmed at random, a shortfall is topped up from the entries that missed, " +
+        "weighted by their own chance.</div>" +
+      this.formActions();
+
+    this.bind("f_name", "name");
+    this.bind("f_dropsMin", "dropsMin", this.int, () => this.refreshLootSum());
+    this.bind("f_dropsMax", "dropsMax", this.int, () => this.refreshLootSum());
+    $("#edAddLoot").onclick = () => {
+      this.draft.loot.push("");
+      this.draft.chances.push(10);
+      this.renderLootRows();
+    };
+    this.renderLootRows();
+  },
+
+  renderLootRows() {
+    const host = $("#edLootRows");
+    if (!host) return;
+    const d = this.draft;
+    const items = Content.list("items");
+    if (!d.loot.length) {
+      host.innerHTML = '<div class="dimmer tiny" style="padding:8px 0">No entries yet.</div>';
+    } else {
+      host.innerHTML = d.loot.map((itemId, i) => {
+        const opts = '<option value="">— pick an item —</option>' + items.map(it =>
+          '<option value="' + it.itemId + '"' + (it.itemId === itemId ? " selected" : "") + ">" +
+          esc(it.name) + " · " + esc(Content.slotDef(it.gearType).label) + "</option>").join("");
+        return '<div class="lootRow">' +
+          '<select data-loot="' + i + '">' + opts + "</select>" +
+          '<span class="pct"><input class="input" type="number" step="0.1" min="0" max="100" ' +
+            'data-chance="' + i + '" value="' + (d.chances[i] != null ? d.chances[i] : 0) + '"></span>' +
+          '<button class="xBtn" data-rm="' + i + '">✕</button></div>';
+      }).join("");
+    }
+    $$("[data-loot]", host).forEach(s => {
+      s.onchange = () => { this.draft.loot[+s.getAttribute("data-loot")] = s.value; this.refreshLootSum(); };
+    });
+    $$("[data-chance]", host).forEach(inp => {
+      inp.oninput = () => {
+        this.draft.chances[+inp.getAttribute("data-chance")] = this.num(inp.value);
+        this.refreshLootSum();
+      };
+    });
+    $$("[data-rm]", host).forEach(b => {
+      b.onclick = () => {
+        const i = +b.getAttribute("data-rm");
+        this.draft.loot.splice(i, 1);
+        this.draft.chances.splice(i, 1);
+        this.renderLootRows();
+      };
+    });
+    this.refreshLootSum();
+  },
+
+  refreshLootSum() {
+    const box = $("#edLootSum");
+    if (!box) return;
+    const d = this.draft;
+    const total = (d.chances || []).reduce((s, c) => s + (+c || 0), 0);
+    const expected = total / 100;
+    const min = +d.dropsMin || 0, max = +d.dropsMax || 0;
+    const clamped = Math.min(Math.max(expected, min), Math.max(min, max));
+    box.innerHTML =
+      "<span>" + (d.loot || []).length + " entries · total " + total.toFixed(1) + "%</span>" +
+      "<span>≈ " + expected.toFixed(2) + " hits → " + clamped.toFixed(2) + " drops</span>";
+  },
+
+  /* ---------------------------------------------------------------- items */
+  itemForm(host) {
+    const d = this.draft;
+    const slot = Content.slotDef(d.gearType);
+    const consumable = slot.gameType === "potion" || slot.gameType === "consumable";
+
+    host.innerHTML =
+      this.formHeader(this.isNew ? "New item" : d.name) +
+      this.fld("f_name", "Name", d.name, { placeholder: "Chain Hauberk" }) +
+      '<div class="row2">' +
+        this.sel("f_gearType", "Gear type", d.gearType,
+          Content.GEAR_SLOTS.map(s => ({ value: s.key, label: s.label }))) +
+        this.raritySelect("f_rarity", d.rarity) +
+      "</div>" +
+
+      '<div class="sect">Icon</div>' +
+      '<div class="iconGrid" id="edIcons"></div>' +
+
+      '<div class="sect">Offence</div>' +
+      '<div class="row3">' +
+        this.fld("f_damageMin", "Dmg min", d.damageMin, { type: "number", min: 0 }) +
+        this.fld("f_damageMax", "Dmg max", d.damageMax, { type: "number", min: 0 }) +
+        this.sel("f_damageType", "Damage type", d.damageType, Content.DAMAGE_TYPES) +
+      "</div>" +
+
+      '<div class="sect">Defence</div>' +
+      '<div class="row2">' +
+        this.fld("f_armor", "Armour", d.armor, { type: "number", min: 0 }) +
+        this.fld("f_resistance", "Resistance", d.resistance, { type: "number", min: 0 }) +
+      "</div>" +
+
+      (consumable
+        ? '<div class="sect">Restores</div><div class="row3">' +
+            this.fld("f_restoreHp", "HP", d.restoreHp || 0, { type: "number", min: 0 }) +
+            this.fld("f_restoreMana", "Mana", d.restoreMana || 0, { type: "number", min: 0 }) +
+            this.fld("f_restoreStamina", "Stamina", d.restoreStamina || 0, { type: "number", min: 0 }) +
+          "</div>"
+        : "") +
+
+      '<div class="sect">Game values</div>' +
+      '<div class="row2">' +
+        this.fld("f_itemLevel", "Item level", d.itemLevel, { type: "number", min: 1 }) +
+        this.fld("f_value", "Value (gold)", d.value, { type: "number", min: 0 }) +
+      "</div>" +
+      '<label class="f"><span>Description</span><textarea id="f_description" placeholder="A line of flavour.">' +
+        esc(d.description || "") + "</textarea></label>" +
+
+      '<div class="sect">The game will see</div>' +
+      '<div class="preview" id="edItemPreview"></div>' +
+      this.formActions();
+
+    this.bind("f_name", "name");
+    this.bind("f_gearType", "gearType", null, () => {
+      // Follow the slot's default icon unless a different one was chosen.
+      const prev = Content.GEAR_SLOTS.find(s => s.icon === this.draft.iconKey);
+      if (!prev || prev.key !== this.draft.gearType) this.draft.iconKey = Content.slotDef(this.draft.gearType).icon;
+      this.renderForm();
+    });
+    this.bind("f_rarity", "rarity", null, () => this.renderForm());
+    ["damageMin", "damageMax", "armor", "resistance", "itemLevel", "value",
+     "restoreHp", "restoreMana", "restoreStamina"]
+      .forEach(k => this.bind("f_" + k, k, this.int, () => this.refreshItemPreview()));
+    this.bind("f_damageType", "damageType", null, () => this.refreshItemPreview());
+    this.bind("f_description", "description", null, () => this.refreshItemPreview());
+
+    const grid = $("#edIcons");
+    grid.innerHTML = Content.ICON_KEYS.map(k =>
+      '<button data-icon="' + k + '" class="' + (d.iconKey === k ? "on" : "") + '" title="' + k + '">' +
+      Content.iconSvg(k, 20) + "</button>").join("");
+    $$("[data-icon]", grid).forEach(b => {
+      b.onclick = () => {
+        this.draft.iconKey = b.getAttribute("data-icon");
+        $$("[data-icon]", grid).forEach(o => o.classList.toggle("on", o === b));
+        this.refreshItemPreview();
+      };
+    });
+    this.refreshItemPreview();
+  },
+
+  refreshItemPreview() {
+    const box = $("#edItemPreview");
+    if (!box) return;
+    const inst = Content.toGameItem(this.draft, this.draft.itemLevel);
+    const slot = Content.slotDef(this.draft.gearType);
+    box.innerHTML =
+      '<div class="pr"><span>Equipment slot</span><b>' + cap(inst.type) + "</b></div>" +
+      '<div class="pr"><span>Stat line</span><b>' + esc(inst.effect || "—") + "</b></div>" +
+      '<div class="pr"><span>Sells for</span><b>' + Math.round(inst.price * 0.45) + " g</b></div>" +
+      '<div class="pr"><span>Preview</span><span style="color:' + Content.rarityColor(this.draft.rarity) + '">' +
+        Content.iconSvg(this.draft.iconKey, 18) + "</span></div>" +
+      (slot.gameType === "quest" ? '<div class="pr"><span class="dimmer tiny">Tomes are carried, not equipped.</span></div>' : "");
+  },
+
+  /* --------------------------------------------------------------- rarity */
+  renderRarity(wrap) {
+    const cfg = Content.config();
+    wrap.innerHTML =
+      '<div class="pad">' +
+        '<div class="noteBox" style="margin:0 0 14px">These multipliers turn a monster\'s authored base ' +
+          "numbers into the numbers the game uses. Nothing is written back multiplied, so changing a row " +
+          "here restyles every monster of that rarity at once. Items are unaffected — their numbers are " +
+          "exactly what you type.</div>" +
+        '<table class="scaleGrid"><thead><tr><th>Tier</th><th>Health</th><th>Damage</th>' +
+          "<th>Armour</th><th>XP &amp; gold</th><th>Extra loot rolls</th><th>Loot tilt</th></tr></thead><tbody>" +
+        Content.RARITY_ORDER.map(r => {
+          const s = cfg.scale[r], c = Content.RARITY[r];
+          return "<tr><td>" + this.rarityChip(r) + "</td>" +
+            ["hp", "dmg", "armor", "exp"].map(k =>
+              '<td><input class="input" type="number" step="0.05" min="0.1" data-scale="' + r + ':' + k +
+              '" value="' + s[k] + '"></td>').join("") +
+            '<td><input class="input" type="number" step="1" min="0" data-scale="' + r + ':lootRolls" value="' + s.lootRolls + '"></td>' +
+            '<td><input class="input" type="number" step="0.05" min="0.1" data-scale="' + r + ':lootTilt" value="' + s.lootTilt + '"></td>' +
+            "</tr>";
+        }).join("") +
+        "</tbody></table>" +
+        '<div class="sect" style="margin-top:22px">Effect on the current bestiary</div>' +
+        '<div id="edScaleEffect"></div>' +
+      "</div>";
+
+    $$("[data-scale]", wrap).forEach(inp => {
+      inp.onchange = () => {
+        const [r, k] = inp.getAttribute("data-scale").split(":");
+        const c = Content.config();
+        c.scale[r][k] = parseFloat(inp.value) || 0;
+        Content.saveConfig(c);
+        this.renderRarityEffect();
+        this.toast("Updated " + Content.rarityName(r) + " " + k + ".");
+      };
+    });
+    this.renderRarityEffect();
+  },
+
+  renderRarityEffect() {
+    const host = $("#edScaleEffect");
+    if (!host) return;
+    const byRarity = {};
+    Content.list("monsters").forEach(m => {
+      const e = Content.effective(m);
+      const b = byRarity[m.rarity] || (byRarity[m.rarity] = { n: 0, hp: 0, exp: 0 });
+      b.n++; b.hp += e.hp; b.exp += e.exp;
+    });
+    const rows = Content.RARITY_ORDER.filter(r => byRarity[r]);
+    host.innerHTML = rows.length
+      ? '<table class="scaleGrid"><thead><tr><th>Tier</th><th>Monsters</th><th>Average HP</th>' +
+        "<th>Average XP</th></tr></thead><tbody>" +
+        rows.map(r => {
+          const b = byRarity[r];
+          return "<tr><td>" + this.rarityChip(r) + "</td><td>" + b.n + "</td>" +
+            "<td>" + Math.round(b.hp / b.n) + "</td><td>" + Math.round(b.exp / b.n) + "</td></tr>";
+        }).join("") + "</tbody></table>"
+      : '<div class="dimmer tiny">No monsters yet.</div>';
+  },
+
+  /* --------------------------------------------------------- import/export */
+  seed() {
+    const empty = Content.isEmpty();
+    if (!empty && !confirm("Replace everything with the game's original content?\n\nAnything you have authored will be lost.")) return;
+    const r = ContentSeed.install(true);
+    this.selected = null; this.draft = null;
+    this.renderAll();
+    this.toast("Seeded " + r.monsters + " monsters, " + r.loot + " loot tables, " + r.items + " items.", "good");
+  },
+
+  exportJson() {
+    const data = Content.exportAll();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = el("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "stride-content-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    const s = Content.stats();
+    this.toast("Exported " + s.monsters + " monsters, " + s.loot + " tables, " + s.items + " items.", "good");
+  },
+
+  importJson() {
+    const inp = el("input");
+    inp.type = "file"; inp.accept = "application/json,.json";
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        let json;
+        try { json = JSON.parse(rd.result); }
+        catch (e) { this.toast("That file wouldn't parse as JSON.", "bad"); return; }
+        const mode = confirm("Merge into what's already here?\n\nOK = merge (matching ids are overwritten)\nCancel = replace everything")
+          ? "merge" : "replace";
+        const r = Content.importAll(json, mode);
+        if (!r.success) { this.toast(r.message, "bad"); return; }
+        this.selected = null; this.draft = null;
+        this.renderAll();
+        this.toast("Imported — now " + r.monsters + " monsters, " + r.loot + " tables, " + r.items + " items.", "good");
+      };
+      rd.readAsText(f);
+    };
+    inp.click();
+  }
+});
+
+/* Expose for the console and the test harness. */
+window.ED = { Ed, Content, ContentSeed, Store };
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => Ed.init());
+else Ed.init();
+</script>
+</body>
+</html>

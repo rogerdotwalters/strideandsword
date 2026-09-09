@@ -1,0 +1,21 @@
+{
+  "name": "stride-and-sword-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build and test tooling for Stride & Sword. Deliberately NOT at the repo root \u2014 Cloudflare Pages auto-installs dependencies when it finds a root package.json, and this project needs no build on their side.",
+  "scripts": {
+    "build": "bash build.sh",
+    "test": "node smoke.js && node permissions.js && node editor.js",
+    "test:game": "node smoke.js",
+    "test:permissions": "node permissions.js",
+    "balance": "node balance.js",
+    "shots": "node shots.js",
+    "serve": "cd ../public && python3 -m http.server 8000",
+    "test:editor": "node editor.js",
+    "calibrate": "node calibrate.js"
+  },
+  "devDependencies": {
+    "leaflet": "^1.9.4",
+    "playwright": "^1.48.0"
+  }
+}
