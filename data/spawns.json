@@ -1,0 +1,90 @@
+[
+  {
+    "spawnTableId": "sp_seed_shallow",
+    "name": "Shallow Vermin",
+    "monsters": [
+      "mon_seed_loose_stapler_swarm",
+      "mon_seed_break_room_rat",
+      "mon_seed_goblin_intern",
+      "mon_seed_filing_cabinet_mimic",
+      "mon_seed_corridor_wisp",
+      "mon_seed_vending_golem"
+    ],
+    "weights": [
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3
+  },
+  {
+    "spawnTableId": "sp_seed_middle",
+    "name": "Corridor Things",
+    "monsters": [
+      "mon_seed_loose_stapler_swarm",
+      "mon_seed_break_room_rat",
+      "mon_seed_goblin_intern",
+      "mon_seed_filing_cabinet_mimic",
+      "mon_seed_corridor_wisp",
+      "mon_seed_vending_golem",
+      "mon_seed_stairwell_stalker",
+      "mon_seed_parking_lot_wraith",
+      "mon_seed_hoarding_kobold"
+    ],
+    "weights": [
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3
+  },
+  {
+    "spawnTableId": "sp_seed_deep",
+    "name": "Deep Floor",
+    "monsters": [
+      "mon_seed_vending_golem",
+      "mon_seed_stairwell_stalker",
+      "mon_seed_parking_lot_wraith",
+      "mon_seed_hoarding_kobold",
+      "mon_seed_fluorescent_horror",
+      "mon_seed_quarterly_review"
+    ],
+    "weights": [
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 2
+  },
+  {
+    "spawnTableId": "sp_seed_boss",
+    "name": "Something Large",
+    "monsters": [
+      "mon_seed_the_facilities_manager",
+      "mon_seed_ancient_copier_awoken",
+      "mon_seed_warden_of_the_skyway"
+    ],
+    "weights": [
+      1,
+      1,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 1
+  }
+]

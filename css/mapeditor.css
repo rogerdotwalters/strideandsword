@@ -1,0 +1,344 @@
+/* ============================================================
+   MAP EDITOR — place, move, resize and delete the locations
+   the game spawns from. Same palette and storage as the game.
+   ============================================================ */
+:root{
+  --bg:#0b0e14; --bg-2:#121722; --bg-3:#1a2130; --bg-4:#232c3d;
+  --line:#2b3446; --line-2:#3a4661;
+  --ink:#e6ecf5; --ink-2:#a3b0c4; --ink-3:#6b7a92;
+  --gold:#e0a33e; --gold-dim:#8a6524; --blood:#c8453c; --ok:#54b37a; --warn:#d99a34;
+  --mana:#4a8fd4;
+  --r:6px; --r-lg:10px;
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+  --font:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.5 var(--font);
+     -webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:600}
+.hidden{display:none !important}
+.mono{font-family:var(--mono)} .dim{color:var(--ink-2)} .dimmer{color:var(--ink-3)} .tiny{font-size:11px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--bg-4);border-radius:10px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- controls ---------- */
+.btn{border:1px solid var(--line-2);background:var(--bg-3);padding:7px 13px;border-radius:var(--r);
+     font-weight:600;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+     transition:background .12s,border-color .12s}
+.btn:hover:not(:disabled){background:var(--bg-4);border-color:var(--gold-dim)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#c08a2e,#9c6d20);border-color:#d4a24c;color:#1a1206}
+.btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#d29a36,#ad7a25)}
+.btn.danger{background:#7d2b26;border-color:var(--blood)}
+.btn.danger:hover:not(:disabled){background:var(--blood)}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.btn.ghost:hover:not(:disabled){background:var(--bg-3)}
+.btn.on{background:linear-gradient(180deg,#c08a2e,#9c6d20);border-color:#d4a24c;color:#1a1206}
+.btn.sm{padding:4px 9px;font-size:11.5px}
+.btn.block{width:100%;justify-content:center}
+a.btn{color:var(--ink);text-decoration:none}
+a.btn:hover{color:var(--ink)}
+.input,select,textarea{width:100%;padding:7px 9px;border-radius:var(--r);
+  border:1px solid var(--line-2);background:#0a0d14;color:var(--ink);font-size:13px}
+.input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-dim);
+  box-shadow:0 0 0 3px rgba(224,163,62,.12)}
+textarea{resize:vertical;min-height:56px}
+label.f{display:block;margin-bottom:11px}
+label.f > span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--ink-3);margin-bottom:4px;font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:13px}
+.check input{accent-color:var(--gold);width:16px;height:16px;flex:none;margin:0}
+input[type=range]{accent-color:var(--gold);padding:0;height:22px}
+.spacer{flex:1}
+
+/* ---------- shell ---------- */
+#me{position:fixed;inset:0;display:flex;flex-direction:column}
+.meTop{display:flex;align-items:center;gap:10px;padding:0 14px;height:54px;flex:none;
+  background:var(--bg-2);border-bottom:1px solid var(--line)}
+.meBrand{display:flex;align-items:baseline;gap:9px;flex:none}
+.meBrand b{font-size:15px;letter-spacing:1.6px;text-transform:uppercase;
+  background:linear-gradient(180deg,#f2d089,#c08a2e);-webkit-background-clip:text;background-clip:text;color:transparent}
+.meBrand span{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-3)}
+.meTop select{width:auto;min-width:170px}
+#meSearch{width:220px}
+
+.meBody{flex:1;display:flex;min-height:0}
+.meLeft{flex:1;min-width:0;display:flex;flex-direction:column}
+#map{flex:1;min-height:0;background:#0a0d14}
+.meTable{height:270px;flex:none;border-top:1px solid var(--line);display:flex;flex-direction:column;background:var(--bg)}
+.meTableBar{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--line);flex:none}
+.meTableWrap{flex:1;overflow:auto}
+.meForm{width:400px;flex:none;overflow-y:auto;background:var(--bg-2);border-left:1px solid var(--line);padding:15px}
+.meStatus{height:28px;flex:none;display:flex;align-items:center;gap:16px;padding:0 14px;
+  background:var(--bg-2);border-top:1px solid var(--line);font-size:11px;color:var(--ink-3);font-family:var(--mono)}
+.meStatus b{color:var(--ink-2)}
+
+/* ---------- table ---------- */
+table.grid{width:100%;border-collapse:collapse;font-size:12.5px}
+table.grid th{position:sticky;top:0;z-index:2;background:var(--bg-2);text-align:left;padding:7px 11px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3);
+  border-bottom:1px solid var(--line);font-weight:700;white-space:nowrap;cursor:pointer;user-select:none}
+table.grid th:hover{color:var(--ink-2)}
+table.grid td{padding:6px 11px;border-bottom:1px solid rgba(43,52,70,.55);white-space:nowrap}
+table.grid tbody tr{cursor:pointer}
+table.grid tbody tr:hover{background:var(--bg-2)}
+table.grid tbody tr.on{background:linear-gradient(90deg,rgba(224,163,62,.14),transparent)}
+table.grid tbody tr.on td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
+table.grid tbody tr.shut td{opacity:.55}
+td.num,th.num{text-align:right;font-family:var(--mono)}
+.nameCell{display:flex;align-items:center;gap:8px}
+.tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10.5px;
+  border:1px solid var(--line-2);color:var(--ink-2);text-transform:capitalize}
+.tag.warn{border-color:var(--warn);color:var(--warn)}
+.tag.ok{border-color:var(--ok);color:var(--ok)}
+.emptyMsg{text-align:center;color:var(--ink-3);padding:28px 12px;font-size:12.5px;line-height:1.7}
+
+/* ---------- map ---------- */
+.leaflet-container{background:#0a0d14;font-family:var(--font)}
+.leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.82) contrast(.9) saturate(.65)}
+.leaflet-control-attribution{background:rgba(11,14,20,.8)!important;color:var(--ink-3)!important;font-size:9.5px}
+.leaflet-control-attribution a{color:var(--ink-2)!important}
+.leaflet-bar a{background:var(--bg-3);color:var(--ink);border-color:var(--line)}
+.leaflet-bar a:hover{background:var(--bg-4);color:var(--ink)}
+.pinWrap{background:none!important;border:0!important}
+.locPin{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:16px;
+  border:2px solid var(--line-2);background:var(--bg-3);box-shadow:0 3px 10px rgba(0,0,0,.6);position:relative}
+.locPin.combat{border-color:#b8574e;background:#2a1a19}
+.locPin.treasure{border-color:var(--gold);background:#2a2213}
+.locPin.boss{border-color:#a76fd4;background:#241a30;width:40px;height:40px;font-size:20px}
+.locPin.landmark{border-color:#4a8fd4;background:#152331}
+.locPin.sel{outline:3px solid var(--gold);outline-offset:3px}
+.locPin.shut{opacity:.5;border-style:dashed}
+.locPin .d{position:absolute;bottom:-5px;right:-5px;background:var(--bg);border:1px solid var(--line-2);
+  border-radius:99px;font-size:9px;padding:0 4px;font-family:var(--mono);font-weight:700;color:var(--ink-2)}
+.mapHint{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:500;
+  background:rgba(18,23,34,.96);border:1px solid var(--gold-dim);color:var(--gold);
+  padding:6px 14px;border-radius:99px;font-size:12px;font-weight:600;box-shadow:var(--shadow);pointer-events:none}
+.mapWrap{position:relative;flex:1;min-height:0;display:flex}
+
+/* ---------- the layer switch, dungeons, floors ---------- */
+.layerSwitch{display:flex;gap:0;flex:none;border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden}
+.layerSwitch button{border:0;background:transparent;color:var(--ink-3);font-weight:700;
+  font-size:11.5px;padding:6px 11px;cursor:pointer;letter-spacing:.3px}
+.layerSwitch button + button{border-left:1px solid var(--line-2)}
+.layerSwitch button:hover{background:var(--bg-3);color:var(--ink-2)}
+.layerSwitch button.on{background:linear-gradient(180deg,#3c2d10,#1e180c);color:var(--gold)}
+
+.instMark{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:17px;
+  border:2px solid var(--line-2);background:var(--bg-3);box-shadow:var(--shadow);position:relative}
+.instMark .d{position:absolute;right:-5px;bottom:-5px;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--bg-2);border:1px solid var(--line-2);font-size:9.5px;
+  font-weight:700;display:grid;place-items:center;color:var(--ink-2)}
+.instMark.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
+.instMark.off{opacity:.5;filter:grayscale(.6)}
+.instPrev{width:100%;height:100%;display:block}
+.instPrev .ph{fill:#141b28}
+.instPrev .pr{fill:#1c2637;stroke:#3a4661;stroke-width:.5}
+.instPrev .pr.floor{fill:#1c2637;stroke:#4a5b78;stroke-width:.6}
+.instPrev .pw{fill:#0a0d14;stroke:#3a4661;stroke-width:.3}
+.instPrev text{text-anchor:middle;dominant-baseline:middle}
+
+.dlvPin{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:17px;
+  border:2px solid var(--line-2);background:var(--bg-3);box-shadow:var(--shadow);position:relative}
+.dlvPin .d{position:absolute;right:-5px;bottom:-5px;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--bg-2);border:1px solid var(--line-2);font-size:9.5px;
+  font-weight:700;display:grid;place-items:center;color:var(--ink-2)}
+.dlvPin.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
+.dlvPin.off{opacity:.5;filter:grayscale(.6)}
+.dlvHandle{width:18px;height:18px;border-radius:4px;background:var(--gold);
+  border:2px solid #1a1206;box-shadow:0 2px 6px rgba(0,0,0,.6);cursor:nwse-resize}
+
+.floorBox{border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;background:var(--bg)}
+.floorBox.open{border-color:var(--gold-dim)}
+.floorHead{display:flex;align-items:center;gap:8px;padding:7px 9px;cursor:pointer;font-size:12.5px}
+.floorHead .spacer{flex:1}
+.floorHead:hover{background:var(--bg-3)}
+.floorBox.open .floorHead{border-bottom:1px solid var(--line)}
+.floorBody{padding:10px 9px 4px}
+.btn.block{width:100%;justify-content:center;margin-bottom:6px}
+
+/* The two zoom presets, same pair as the game's map. */
+.zoomModes{position:absolute;top:10px;right:10px;z-index:500;display:flex;flex-direction:column;gap:6px}
+.zmBtn{width:46px;min-height:46px;padding:5px 2px;display:grid;gap:1px;place-items:center;
+  border-radius:var(--r);border:1px solid var(--line-2);background:rgba(18,23,34,.94);
+  color:var(--ink-3);box-shadow:var(--shadow);cursor:pointer;line-height:1}
+.zmBtn:hover{background:var(--bg-4);color:var(--ink-2)}
+.zmIc{font-size:16px;filter:grayscale(1) opacity(.8)}
+.zmLb{font-size:8.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.zmBtn.on{border-color:var(--gold-dim);color:var(--gold);
+  background:linear-gradient(180deg,rgba(60,45,16,.96),rgba(30,24,12,.96))}
+.zmBtn.on .zmIc{filter:none}
+
+/* ---------- form ---------- */
+.formHead{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+.formHead h3{font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sect{margin:16px 0 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--ink-3);font-weight:700;display:flex;align-items:center;gap:8px}
+.sect::after{content:"";flex:1;height:1px;background:var(--line)}
+.emptyForm{color:var(--ink-3);text-align:center;padding:48px 18px;font-size:12.5px;line-height:1.8}
+.formActions{display:flex;gap:8px;margin-top:16px;padding-top:13px;border-top:1px solid var(--line)}
+.err{color:var(--blood);font-size:12px;min-height:16px;margin:2px 0 4px}
+.radiusRow{display:grid;grid-template-columns:1fr 74px;gap:9px;align-items:center}
+.dayRow{display:flex;gap:4px}
+.dayRow button{flex:1;padding:6px 0;border-radius:var(--r);border:1px solid var(--line-2);
+  background:var(--bg-3);font-size:11px;font-weight:700;color:var(--ink-3)}
+.dayRow button.on{background:linear-gradient(180deg,#c08a2e,#9c6d20);border-color:#d4a24c;color:#1a1206}
+.noteBox{background:var(--bg-3);border:1px solid var(--line);border-left:2px solid var(--mana);
+  border-radius:var(--r);padding:9px 11px;font-size:11.5px;line-height:1.6;color:var(--ink-2);margin-top:9px}
+.kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.kv:last-child{border-bottom:0}
+.kv b{font-family:var(--mono)}
+
+#toasts{position:fixed;top:64px;left:0;right:0;z-index:900;display:flex;flex-direction:column;
+  align-items:center;gap:6px;pointer-events:none}
+.toast{background:rgba(26,33,48,.97);border:1px solid var(--line-2);border-left:3px solid var(--gold);
+  padding:8px 14px;border-radius:var(--r);font-size:12.5px;box-shadow:var(--shadow);max-width:520px}
+.toast.good{border-left-color:var(--ok)}
+.toast.bad{border-left-color:var(--blood)}
+
+/* ============================================================
+   RESPONSIVE
+   Desktop shows map, table and form at once. Below 900px they
+   become three panes, switched by the bar along the bottom.
+   ============================================================ */
+@media (min-width:1600px){ .meForm{width:460px} .meTable{height:300px} }
+@media (max-width:1150px){ .meForm{width:340px} .meTable{height:210px} }
+
+.mobileOnly{display:none}
+.meBreak{display:none}
+.paneBar{display:none}
+.fab{display:none}
+.backBtn{display:none}
+
+@media (max-width:900px){
+  /* The toolbar wraps to two rows here, so a toast pinned near the top lands
+     on the search field. Move them to the foot, and left of the floating
+     place button, which owns the bottom-right corner. */
+  #toasts{top:auto;bottom:64px;align-items:flex-start;padding-left:10px}
+  #toasts .toast{max-width:calc(100vw - 150px)}
+  .desktopOnly{display:none !important}
+  .mobileOnly{display:inline-flex}
+
+  .meTop{height:auto;min-height:52px;padding:8px 10px;gap:8px;flex-wrap:wrap}
+  .meBrand{display:none}
+  .meTop select{flex:1 1 auto;min-width:0}
+  /* Two deterministic rows: zone + menu, then search + Go. A zero-height
+     full-width item forces the line break, so Go can never be orphaned. */
+  #meMenu{order:1}
+  .meBreak{display:block;order:2;flex:0 0 100%;height:0;margin:0}
+  #meSearch{flex:1 1 0;width:auto;min-width:0;order:5}
+  #meGo{order:6;flex:none}
+
+  /* Three stacked panes, one at a time. They stop above the switcher rather
+     than running underneath it, or the floating button ends up unreachable. */
+  .meBody{position:relative}
+  .meLeft,.meForm{position:absolute;left:0;right:0;top:0;bottom:52px;width:auto;border:0}
+  .meLeft{display:none;flex-direction:column}
+  .meForm{display:none;padding:14px 14px 92px}
+  body[data-pane="map"] .meLeft,
+  body[data-pane="list"] .meLeft{display:flex}
+  body[data-pane="form"] .meForm{display:block}
+  body[data-pane="map"] .meTable{display:none}
+  body[data-pane="list"] .mapWrap{display:none}
+  body[data-pane="list"] .meTable{height:auto;flex:1;border-top:0}
+
+  /* the switcher */
+  .paneBar{display:flex;position:absolute;left:0;right:0;bottom:0;z-index:20;height:52px;
+    background:var(--bg-2);border-top:1px solid var(--line)}
+  .paneBar button{flex:1;border:0;background:transparent;color:var(--ink-3);
+    font-weight:700;font-size:12px;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:2px;letter-spacing:.4px}
+  .paneBar button .ic{font-size:16px;line-height:1}
+  .paneBar button.on{color:var(--gold);box-shadow:inset 0 2px 0 var(--gold)}
+
+  /* placing is a thumb-friendly floating button over the map */
+  .fab{display:inline-flex;position:absolute;right:14px;bottom:14px;z-index:15;
+    align-items:center;gap:8px;padding:13px 18px;border-radius:99px;
+    background:linear-gradient(180deg,#c08a2e,#9c6d20);border:1px solid #d4a24c;color:#1a1206;
+    font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  .fab.on{background:linear-gradient(180deg,#d8524a,#a83a33);border-color:#e0665e;color:#fff}
+
+  .backBtn{display:inline-grid;place-items:center;width:38px;height:38px;flex:none;
+    border-radius:var(--r);border:1px solid var(--line-2);background:var(--bg-3);
+    font-size:17px;line-height:1;padding:0}
+  .formHead{position:sticky;top:0;z-index:5;background:var(--bg-2);
+    margin:-14px -14px 12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .formActions{position:fixed;left:0;right:0;bottom:52px;z-index:22;margin:0;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    background:var(--bg-2);border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.4)}
+  .meStatus{display:none}
+  .mapHint{top:auto;bottom:76px;font-size:12px}
+  .meTableBar{flex-wrap:wrap;gap:6px}
+  .row3{grid-template-columns:1fr 1fr}
+}
+
+/* Tables become cards on a phone; each cell labels itself from data-l. */
+@media (max-width:700px){
+  table.grid thead{display:none}
+  table.grid,table.grid tbody,table.grid tr,table.grid td{display:block;width:auto}
+  table.grid tr{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-lg);
+    margin:9px 10px;padding:9px 12px}
+  table.grid tbody tr.on{background:linear-gradient(180deg,rgba(224,163,62,.14),var(--bg-2));
+    border-color:var(--gold-dim)}
+  table.grid tbody tr.on td:first-child{box-shadow:none}
+  table.grid td{border:0;padding:3px 0;display:flex;align-items:center;
+    justify-content:space-between;gap:14px;text-align:right;white-space:normal}
+  table.grid td::before{content:attr(data-l);color:var(--ink-3);font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.7px;font-weight:700;text-align:left;flex:none}
+  table.grid td:first-child{padding-bottom:7px;margin-bottom:5px;
+    border-bottom:1px solid var(--line);justify-content:flex-start;text-align:left}
+  table.grid td:first-child::before{display:none}
+  table.grid td:first-child .nameCell b{font-size:14.5px}
+}
+
+/* Fingers need bigger targets than a mouse does. */
+@media (pointer:coarse){
+  .btn{padding:10px 15px;min-height:42px}
+  .backBtn{width:44px;height:44px}
+  input,select,textarea{font-size:16px}
+  .btn.sm{padding:9px 13px;min-height:44px;font-size:12.5px}
+  .input,select,textarea{padding:10px 11px;font-size:16px;min-height:44px}
+  .check{min-height:44px}
+  .check input{width:20px;height:20px}
+  .dayRow button{min-height:44px;font-size:12px}
+  .xBtn{width:38px;height:38px}
+  input[type=range]{height:44px}
+  table.grid tbody tr{min-height:44px}
+  .locPin{width:38px;height:38px;font-size:18px}
+  .locPin.boss{width:46px;height:46px;font-size:22px}
+  .layerSwitch button{min-height:44px;padding:0 15px;font-size:12.5px}
+  .radiusRow input[type=range]{height:44px}
+  .instMark{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:17px;
+  border:2px solid var(--line-2);background:var(--bg-3);box-shadow:var(--shadow);position:relative}
+.instMark .d{position:absolute;right:-5px;bottom:-5px;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--bg-2);border:1px solid var(--line-2);font-size:9.5px;
+  font-weight:700;display:grid;place-items:center;color:var(--ink-2)}
+.instMark.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
+.instMark.off{opacity:.5;filter:grayscale(.6)}
+.instPrev{width:100%;height:100%;display:block}
+.instPrev .ph{fill:#141b28}
+.instPrev .pr{fill:#1c2637;stroke:#3a4661;stroke-width:.5}
+.instPrev .pr.floor{fill:#1c2637;stroke:#4a5b78;stroke-width:.6}
+.instPrev .pw{fill:#0a0d14;stroke:#3a4661;stroke-width:.3}
+.instPrev text{text-anchor:middle;dominant-baseline:middle}
+
+.dlvPin{width:42px;height:42px;font-size:19px}
+  .dlvHandle{width:24px;height:24px}
+  .floorHead{min-height:44px}
+}
+
+/* --- location art ------------------------------------------------------- */
+.locArt{pointer-events:none}
+.artRow{display:flex;gap:10px;align-items:flex-start;margin:6px 0}
+.artPrev{width:88px;height:88px;flex:0 0 88px;border:1px solid var(--line,#2a3346);border-radius:8px;
+  background:#0f131c;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.artPrev img{max-width:100%;max-height:100%;display:block}
+.artFields{flex:1 1 auto;min-width:0}
+.artBtns{display:flex;gap:6px;margin:4px 0 2px}

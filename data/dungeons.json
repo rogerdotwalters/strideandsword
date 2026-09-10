@@ -1,0 +1,91 @@
+[
+  {
+    "dungeonId": "dgn_seed_sump",
+    "name": "The Sump",
+    "zoneId": "",
+    "kind": "cave",
+    "shape": "circle",
+    "latitude": 41.8819,
+    "longitude": -87.6238,
+    "radius": 45,
+    "width": 80,
+    "height": 60,
+    "entryRange": 25,
+    "minLevel": 1,
+    "floors": [
+      {
+        "level": 1,
+        "name": "",
+        "lengthMeters": 180,
+        "encounters": 2,
+        "spawnTableId": "sp_seed_shallow",
+        "chests": 1,
+        "chestTier": "wooden",
+        "chestLootTableId": "lt_seed_vermin",
+        "hasBoss": false,
+        "bossSpawnTableId": "",
+        "difficulty": 2,
+        "experience": 0,
+        "gold": 0
+      },
+      {
+        "level": 2,
+        "name": "",
+        "lengthMeters": 160,
+        "encounters": 2,
+        "spawnTableId": "sp_seed_middle",
+        "chests": 1,
+        "chestTier": "wooden",
+        "chestLootTableId": "lt_seed_office",
+        "hasBoss": true,
+        "bossSpawnTableId": "sp_seed_boss",
+        "difficulty": 4,
+        "experience": 0,
+        "gold": 0
+      }
+    ],
+    "active": true,
+    "timeStart": "",
+    "timeEnd": "",
+    "days": [],
+    "respawnMinutes": 180,
+    "notes": "It smells of standing water and something older."
+  },
+  {
+    "dungeonId": "dgn_seed_copse",
+    "name": "Ashwood Copse",
+    "zoneId": "",
+    "kind": "forest",
+    "shape": "rect",
+    "latitude": 41.883449999999996,
+    "longitude": -87.6236,
+    "radius": 40,
+    "width": 90,
+    "height": 60,
+    "entryRange": 30,
+    "minLevel": 3,
+    "floors": [
+      {
+        "level": 1,
+        "name": "",
+        "lengthMeters": 240,
+        "encounters": 3,
+        "spawnTableId": "sp_seed_middle",
+        "chests": 2,
+        "chestTier": "wooden",
+        "chestLootTableId": "lt_seed_office",
+        "hasBoss": false,
+        "bossSpawnTableId": "",
+        "difficulty": 4,
+        "experience": 0,
+        "gold": 0
+      }
+    ],
+    "active": true,
+    "timeStart": "",
+    "timeEnd": "",
+    "days": [],
+    "respawnMinutes": 240,
+    "notes": "The trees are too evenly spaced to have grown there."
+  }
+]

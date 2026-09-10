@@ -1,0 +1,16 @@
+[
+  {
+    "userId": "usr_seed_tester",
+    "username": "tester",
+    "email": "tester@example.com",
+    "password": "walk1234",
+    "note": "Dev login, seeded on first run. Passwords here are plain text on purpose - this file is a stand-in for a real accounts service, and everything in it is throwaway. Replace before this goes anywhere."
+  },
+  {
+    "userId": "usr_seed_walker",
+    "username": "walker",
+    "email": "",
+    "password": "walk1234",
+    "note": "A second dev login, for testing two characters side by side."
+  }
+]

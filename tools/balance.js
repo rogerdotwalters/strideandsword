@@ -1,11 +1,15 @@
 const { chromium } = require('playwright');
 const path = require('path');
+const { serve, BASE } = require('./serve');
 
 (async () => {
+  // The game fetches its database out of data/*.json, and fetch() will not
+  // touch a file:// URL — so the suites run against a real origin now.
+  await serve();
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
   const p = await (await b.newContext()).newPage();
   await p.route('**cdnjs.cloudflare.com/**', r => r.abort());
-  await p.goto('file://' + path.resolve(__dirname, '../public/index.html'));
+  await p.goto(BASE + '/index.html');
   await p.waitForTimeout(800);
 
   const out = await p.evaluate(() => {

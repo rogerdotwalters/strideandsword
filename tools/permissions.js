@@ -1,12 +1,18 @@
 /* Location-permission behaviour across origins and permission states. */
 const { chromium } = require('playwright');
 const path = require('path');
+const { serve, serveAt, BASE } = require('./serve');
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const { mockOverpass } = require('./mock-osm');
 
-const FILE_URL = 'file://' + path.resolve(__dirname, '../public/index.html');
+/* Two origins on purpose. FILE_URL is a real file:// page, because the whole
+   point of the first block is what a browser does to geolocation there — and
+   the database not loading over file:// is part of the same story. HTTP_URL is
+   the served copy, which is how the game is actually meant to be opened. */
+const FILE_URL = 'file://' + path.resolve(__dirname, '../index.html');
+const HTTP_URL = BASE + '/index.html';
 let pass = 0, fail = 0;
 
 function lanIp() {
@@ -64,6 +70,9 @@ async function toGame(page, url) {
 }
 
 (async () => {
+  // The game fetches its database out of data/*.json, and fetch() will not
+  // touch a file:// URL — so the suites run against a real origin now.
+  await serve();
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
   /* ---------------------------------------------------------------- */
@@ -170,7 +179,7 @@ async function toGame(page, url) {
   console.log('\n===== DECLINING THE GATE =====');
   {
     const { ctx, page } = await newPage(browser, { permissions: [] });
-    await toGame(page, FILE_URL);
+    await toGame(page, HTTP_URL);
     await step('"Dev testing instead" switches modes and closes the gate', async () => {
       await page.click('.modalFoot .btn.ghost');
       await page.waitForTimeout(700);
@@ -204,11 +213,10 @@ async function toGame(page, url) {
   /* ---------------------------------------------------------------- */
   console.log('\n===== SERVED OVER http://localhost =====');
   {
-    const html = fs.readFileSync(path.resolve(__dirname, '../public/index.html'));
-    const srv = http.createServer((q, s) => {
-      s.writeHead(200, { 'Content-Type': 'text/html' }); s.end(html);
-    });
-    await new Promise(r => srv.listen(8231, '0.0.0.0', r));
+    // The whole repo on a second origin, not just index.html — the page pulls
+    // in js/, css/ and data/, and a server that answers everything with the
+    // same HTML gives you a blank screen and a confusing failure.
+    const srv = await serveAt(8231, '0.0.0.0');
 
     const { ctx, page } = await newPage(browser, { permissions: [] }, true);
     await toGame(page, 'http://localhost:8231/');
@@ -261,14 +269,14 @@ async function toGame(page, url) {
     } else {
       console.log('  SKIP no LAN address available in this sandbox');
     }
-    srv.close();
+    await srv.close();
   }
 
   /* ---------------------------------------------------------------- */
   console.log('\n===== PERMISSION ALREADY GRANTED =====');
   {
     const { ctx, page } = await newPage(browser, { permissions: ['geolocation'] });
-    await toGame(page, FILE_URL);
+    await toGame(page, HTTP_URL);
     await step('no gate when the browser has already said yes', async () => {
       const gate = await page.$('.modalBack');
       const r = await page.evaluate(() => ({ status: SS.Loc.status, watch: SS.Loc.watchId,

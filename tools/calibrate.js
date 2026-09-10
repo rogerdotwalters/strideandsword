@@ -1,14 +1,18 @@
 /* Derive authored monster numbers from the previously balanced built-in
-   bestiary, so seeding the editor does not silently change difficulty.
-   Prints rows ready to paste into ContentSeed.MONSTERS. */
+   bestiary, so the seed does not silently change difficulty.
+   Prints rows ready to paste into data/monsters.json. */
 const { chromium } = require('playwright');
 const path = require('path');
+const { serve, BASE } = require('./serve');
 
 (async () => {
+  // The game fetches its database out of data/*.json, and fetch() will not
+  // touch a file:// URL — so the suites run against a real origin now.
+  await serve();
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
   const p = await (await b.newContext()).newPage();
   await p.route('**cdnjs.cloudflare.com/**', r => r.abort());
-  await p.goto('file://' + path.resolve(__dirname, '../public/index.html'));
+  await p.goto(BASE + '/index.html');
   await p.waitForTimeout(700);
 
   const rows = await p.evaluate(() => {
@@ -27,7 +31,7 @@ const path = require('path');
     }
     const templates = BESTIARY.concat(BOSSES);
     const scale = Content.config().scale;
-    return ContentSeed.build().monsters.map(m => {
+    return Content.list('monsters').map(m => {
       const t = templates.find(x => x.name === m.name);
       if (!t) return { name: m.name, missing: true };
       // Authored numbers describe the monster at the bottom of its band, and

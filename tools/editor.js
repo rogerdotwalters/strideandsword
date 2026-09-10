@@ -2,10 +2,12 @@
    authored content actually reaching the game. */
 const { chromium } = require('playwright');
 const path = require('path');
+const { serve, BASE } = require('./serve');
+const { emptyDatabase } = require('./fixtures');
 const { mockOverpass } = require('./mock-osm');
 
-const EDITOR_URL = 'file://' + path.resolve(__dirname, '../public/editor.html');
-const GAME_URL   = 'file://' + path.resolve(__dirname, '../public/index.html');
+const EDITOR_URL = BASE + '/editor.html';
+const GAME_URL   = BASE + '/index.html';
 
 let pass = 0, fail = 0;
 async function step(name, fn) {
@@ -20,6 +22,8 @@ async function newPage(browser) {
     permissions: ['geolocation']
   });
   const page = await ctx.newPage();
+  // These suites author their own content, so nothing seeds in underneath them.
+  await emptyDatabase(page);
   page.on('dialog', d => d.accept());          // confirm() prompts say yes
   await page.route('**cdnjs.cloudflare.com/**', r => r.abort());
   await page.route('**tile.openstreetmap.org/**', r => r.abort());
@@ -29,6 +33,9 @@ async function newPage(browser) {
 }
 
 (async () => {
+  // The game fetches its database out of data/*.json, and fetch() will not
+  // touch a file:// URL — so the suites run against a real origin now.
+  await serve();
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
   /* ================================================================ EDITOR */

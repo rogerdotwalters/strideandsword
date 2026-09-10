@@ -1,0 +1,275 @@
+/* ============================================================
+   CONTENT EDITOR — desktop authoring tool for monsters, loot
+   tables and items. Shares the game's palette and its storage.
+   ============================================================ */
+:root{
+  --bg:#0b0e14; --bg-2:#121722; --bg-3:#1a2130; --bg-4:#232c3d;
+  --line:#2b3446; --line-2:#3a4661;
+  --ink:#e6ecf5; --ink-2:#a3b0c4; --ink-3:#6b7a92;
+  --gold:#e0a33e; --gold-dim:#8a6524; --blood:#c8453c; --ok:#54b37a; --warn:#d99a34;
+  --mana:#4a8fd4;
+  --r:6px; --r-lg:10px;
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+  --font:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.5 var(--font);
+     -webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:600}
+.hidden{display:none !important}
+.mono{font-family:var(--mono)}
+.dim{color:var(--ink-2)} .dimmer{color:var(--ink-3)} .tiny{font-size:11px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--bg-4);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:var(--line-2)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- controls ---------- */
+.btn{border:1px solid var(--line-2);background:var(--bg-3);padding:7px 13px;border-radius:var(--r);
+     font-weight:600;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;
+     transition:background .12s,border-color .12s}
+.btn:hover:not(:disabled){background:var(--bg-4);border-color:var(--gold-dim)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#c08a2e,#9c6d20);border-color:#d4a24c;color:#1a1206}
+.btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#d29a36,#ad7a25)}
+.btn.danger{background:#7d2b26;border-color:var(--blood)}
+.btn.danger:hover:not(:disabled){background:var(--blood)}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.btn.ghost:hover:not(:disabled){background:var(--bg-3)}
+.btn.sm{padding:4px 9px;font-size:11.5px}
+a.btn{color:var(--ink);text-decoration:none}
+a.btn:hover{color:var(--ink)}
+.btn.block{width:100%;justify-content:center}
+.input,select,textarea{width:100%;padding:7px 9px;border-radius:var(--r);
+  border:1px solid var(--line-2);background:#0a0d14;color:var(--ink);font-size:13px}
+.input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-dim);
+  box-shadow:0 0 0 3px rgba(224,163,62,.12)}
+textarea{resize:vertical;min-height:64px;line-height:1.5}
+select{cursor:pointer}
+label.f{display:block;margin-bottom:11px}
+label.f > span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--ink-3);margin-bottom:4px;font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:8px;margin-bottom:11px;cursor:pointer;font-size:13px}
+.check input{accent-color:var(--gold);width:16px;height:16px;flex:none;margin:0}
+
+/* ---------- shell ---------- */
+#ed{position:fixed;inset:0;display:flex;flex-direction:column}
+.edTop{display:flex;align-items:center;gap:14px;padding:0 14px;height:54px;flex:none;
+  background:var(--bg-2);border-bottom:1px solid var(--line)}
+.edBrand{display:flex;align-items:baseline;gap:9px}
+.edBrand b{font-size:15px;letter-spacing:1.6px;text-transform:uppercase;
+  background:linear-gradient(180deg,#f2d089,#c08a2e);-webkit-background-clip:text;background-clip:text;color:transparent}
+.edBrand span{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-3)}
+.edTabs{display:flex;gap:4px;background:var(--bg-3);padding:3px;border-radius:var(--r-lg);border:1px solid var(--line)}
+.edTabs button{border:0;background:transparent;padding:6px 14px;border-radius:var(--r);
+  color:var(--ink-3);font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px}
+.edTabs button.on{background:var(--bg-4);color:var(--ink)}
+.edTabs .n{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+  background:var(--bg-2);padding:0 5px;border-radius:99px;border:1px solid var(--line)}
+.edTabs button.on .n{color:var(--gold);border-color:var(--gold-dim)}
+.spacer{flex:1}
+
+.edBody{flex:1;display:flex;min-height:0}
+.edList{flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+.edForm{width:430px;flex:none;overflow-y:auto;background:var(--bg-2);padding:16px}
+.edStatus{height:30px;flex:none;display:flex;align-items:center;gap:16px;padding:0 14px;
+  background:var(--bg-2);border-top:1px solid var(--line);font-size:11px;color:var(--ink-3);
+  font-family:var(--mono)}
+.edStatus b{color:var(--ink-2);font-weight:600}
+
+.listBar{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--line);flex:none}
+.listBar .input{max-width:280px}
+.listWrap{flex:1;overflow-y:auto}
+
+/* ---------- table ---------- */
+table.grid{width:100%;border-collapse:collapse;font-size:12.5px}
+table.grid th{position:sticky;top:0;z-index:2;background:var(--bg-2);text-align:left;
+  padding:8px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--ink-3);border-bottom:1px solid var(--line);font-weight:700;white-space:nowrap;cursor:pointer;user-select:none}
+table.grid th:hover{color:var(--ink-2)}
+table.grid th .ar{color:var(--gold);font-size:9px}
+table.grid td{padding:8px 12px;border-bottom:1px solid rgba(43,52,70,.55);vertical-align:middle}
+table.grid tbody tr{cursor:pointer}
+table.grid tbody tr:hover{background:var(--bg-2)}
+table.grid tbody tr.on{background:linear-gradient(90deg,rgba(224,163,62,.14),transparent)}
+table.grid tbody tr.on td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
+td.num,th.num{text-align:right;font-family:var(--mono)}
+.nameCell{display:flex;align-items:center;gap:9px;min-width:0}
+.nameCell b{font-weight:600}
+.emojiIcon{font-size:16px;line-height:1}
+.gicon{display:block}
+.iconBox{width:30px;height:30px;border-radius:var(--r);background:var(--bg-3);
+  border:1px solid var(--line);display:grid;place-items:center;flex:none}
+
+/* ---------- rarity chips ---------- */
+.rchip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.6px;padding:2px 8px;border-radius:99px;
+  border:1px solid currentColor;background:rgba(255,255,255,.04)}
+.rdot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10.5px;
+  border:1px solid var(--line-2);color:var(--ink-2);text-transform:capitalize}
+
+/* ---------- form panel ---------- */
+.formHead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.formHead h3{font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sect{margin:18px 0 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--ink-3);font-weight:700;display:flex;align-items:center;gap:8px}
+.sect::after{content:"";flex:1;height:1px;background:var(--line)}
+.emptyForm{color:var(--ink-3);text-align:center;padding:60px 20px;font-size:13px;line-height:1.7}
+.formActions{display:flex;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.err{color:var(--blood);font-size:12px;min-height:16px;margin:2px 0 6px}
+
+/* live preview of rarity scaling */
+.preview{background:var(--bg-3);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.preview .pr{display:flex;justify-content:space-between;align-items:baseline;
+  padding:4px 0;border-bottom:1px solid rgba(43,52,70,.6);font-size:12px}
+.preview .pr:last-child{border-bottom:0}
+.preview .pr b{font-family:var(--mono);font-size:13px}
+.preview .pr .was{color:var(--ink-3);font-family:var(--mono);font-size:11px;margin-right:6px}
+.preview .up{color:var(--ok)}
+
+/* icon picker */
+.iconGrid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+.iconGrid button{aspect-ratio:1;border:1px solid var(--line);background:var(--bg-3);
+  border-radius:var(--r);display:grid;place-items:center;padding:0;color:var(--ink-2)}
+.iconGrid button:hover{background:var(--bg-4);color:var(--ink)}
+.iconGrid button.on{border-color:var(--gold);background:rgba(224,163,62,.14);color:var(--gold)}
+
+/* loot rows */
+.lootRow{display:grid;grid-template-columns:1fr 78px 30px;gap:7px;align-items:center;margin-bottom:6px}
+.lootRow .pct{position:relative}
+.lootRow .pct::after{content:"%";position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  color:var(--ink-3);font-size:11px;pointer-events:none}
+.lootRow .pct input{padding-right:20px;text-align:right;font-family:var(--mono)}
+.xBtn{width:30px;height:30px;border-radius:var(--r);border:1px solid var(--line);
+  background:var(--bg-3);padding:0;line-height:1;color:var(--ink-3)}
+.xBtn:hover{background:#7d2b26;border-color:var(--blood);color:var(--ink)}
+.lootSum{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-2);padding:8px 10px;background:var(--bg-3);border-radius:var(--r);margin-top:8px}
+.noteBox{background:var(--bg-3);border:1px solid var(--line);border-left:2px solid var(--mana);
+  border-radius:var(--r);padding:9px 11px;font-size:11.5px;line-height:1.6;color:var(--ink-2);margin-top:9px}
+
+/* rarity tab */
+.scaleGrid{width:100%;border-collapse:collapse;font-size:12.5px}
+.scaleGrid th{text-align:left;padding:8px 10px;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.8px;color:var(--ink-3);border-bottom:1px solid var(--line)}
+.scaleGrid td{padding:6px 10px;border-bottom:1px solid rgba(43,52,70,.55)}
+.scaleGrid input{width:74px;text-align:right;font-family:var(--mono);padding:5px 7px}
+.pad{padding:16px}
+
+/* modal */
+.modalBack{position:fixed;inset:0;z-index:100;background:rgba(5,7,11,.8);display:flex;
+  align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.modal{width:100%;max-width:520px;background:var(--bg-2);border:1px solid var(--line-2);
+  border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.modal h3{padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px}
+.modal .mb{padding:16px}
+.modal .mf{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+
+/* toasts */
+#toasts{position:fixed;top:64px;left:0;right:0;z-index:200;display:flex;flex-direction:column;
+  align-items:center;gap:6px;pointer-events:none}
+.toast{background:rgba(26,33,48,.97);border:1px solid var(--line-2);border-left:3px solid var(--gold);
+  padding:8px 14px;border-radius:var(--r);font-size:12.5px;box-shadow:var(--shadow);max-width:520px}
+.toast.good{border-left-color:var(--ok)}
+.toast.bad{border-left-color:var(--blood)}
+
+/* ============================================================
+   RESPONSIVE
+   Desktop keeps the two-pane layout. Below 860px the panes stack
+   and only one is shown at a time, switched by body[data-pane].
+   ============================================================ */
+
+/* wider screens get a roomier form rather than a stretched list */
+@media (min-width:1600px){ .edForm{width:480px} }
+@media (max-width:1100px){ .edForm{width:340px} }
+
+.backBtn{display:none}
+.mobileOnly{display:none}
+.paneBar{display:none}
+
+@media (max-width:860px){
+  body{font-size:14px}
+  .desktopOnly{display:none !important}
+  .mobileOnly{display:inline-flex}
+
+  .edTop{height:auto;min-height:52px;padding:8px 10px;gap:8px;flex-wrap:wrap}
+  .edBrand span{display:none}
+  .edTabs{order:3;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;padding:4px}
+  .edTabs::-webkit-scrollbar{display:none}
+  .edTabs button{flex:none;padding:9px 13px;font-size:13px}
+
+  .edBody{position:relative}
+  .edList,.edForm{position:absolute;inset:0;width:auto;border:0}
+  .edList{display:none}
+  .edForm{display:none;padding:14px 14px 96px}
+  body[data-pane="list"] .edList{display:flex}
+  body[data-pane="form"] .edForm{display:block}
+
+  .listBar{padding:10px;gap:8px;flex-wrap:wrap}
+  .listBar .input{max-width:none;flex:1 1 100%;order:1}
+  .listBar .spacer{display:none}
+  #edCount{order:2}
+  #edNew{order:3;margin-left:auto}
+
+  /* the form gets a header with a way back, and a save bar pinned down */
+  .backBtn{display:inline-grid;place-items:center;width:38px;height:38px;flex:none;
+    border-radius:var(--r);border:1px solid var(--line-2);background:var(--bg-3);
+    font-size:17px;line-height:1;padding:0}
+  .formHead{position:sticky;top:0;z-index:5;background:var(--bg-2);
+    margin:-14px -14px 12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .formActions{position:fixed;left:0;right:0;bottom:0;z-index:6;margin:0;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    background:var(--bg-2);border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.4)}
+  .edStatus{display:none}
+
+  .iconGrid{grid-template-columns:repeat(6,1fr);gap:7px}
+  .row3{grid-template-columns:1fr 1fr}
+  .lootRow{grid-template-columns:1fr 84px 38px}
+}
+
+/* ------------------------------------------------------------
+   Tables become cards on a phone: the header row disappears and
+   each cell labels itself from data-l.
+   ------------------------------------------------------------ */
+@media (max-width:700px){
+  table.grid thead{display:none}
+  table.grid,table.grid tbody,table.grid tr,table.grid td{display:block;width:auto}
+  table.grid tr{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-lg);
+    margin:9px 10px;padding:9px 12px}
+  table.grid tbody tr.on{background:linear-gradient(180deg,rgba(224,163,62,.14),var(--bg-2));
+    border-color:var(--gold-dim)}
+  table.grid tbody tr.on td:first-child{box-shadow:none}
+  table.grid td{border:0;padding:3px 0;display:flex;align-items:center;
+    justify-content:space-between;gap:14px;text-align:right}
+  table.grid td::before{content:attr(data-l);color:var(--ink-3);font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.7px;font-weight:700;text-align:left;flex:none}
+  table.grid td:first-child{padding-bottom:7px;margin-bottom:5px;
+    border-bottom:1px solid var(--line);justify-content:flex-start;text-align:left}
+  table.grid td:first-child::before{display:none}
+  table.grid td:first-child .nameCell b{font-size:14.5px}
+  td.num,th.num{text-align:right}
+}
+
+/* Fingers need bigger targets than a mouse does. */
+@media (pointer:coarse){
+  .btn{padding:10px 15px;min-height:42px}
+  .backBtn{width:44px;height:44px}
+  input,select,textarea{font-size:16px}
+  .btn.sm{padding:9px 13px;min-height:44px;font-size:12.5px}
+  .input,select,textarea{padding:10px 11px;font-size:16px;min-height:44px}
+  textarea{min-height:78px}
+  .check{min-height:44px}
+  .check input,.tick input{width:20px;height:20px}
+  table.grid tbody tr{min-height:44px}
+  .xBtn{width:38px;height:38px}
+  .iconGrid button{min-height:44px}
+  .closeX{width:38px;height:38px}
+}

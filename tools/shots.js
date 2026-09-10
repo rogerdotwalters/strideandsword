@@ -1,5 +1,6 @@
 const { chromium } = require('playwright');
 const path = require('path');
+const { serve, BASE } = require('./serve');
 const fs = require('fs');
 const { mockOverpass } = require('./mock-osm');
 
@@ -7,6 +8,9 @@ const LEAFLET_JS = fs.readFileSync(path.resolve(__dirname, 'node_modules/leaflet
 const LEAFLET_CSS = fs.readFileSync(path.resolve(__dirname, 'node_modules/leaflet/dist/leaflet.css'), 'utf8');
 
 (async () => {
+  // The game fetches its database out of data/*.json, and fetch() will not
+  // touch a file:// URL — so the suites run against a real origin now.
+  await serve();
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
   const ctx = await b.newContext({ viewport: { width: 430, height: 900 }, deviceScaleFactor: 2,
     geolocation: { latitude: 41.8827, longitude: -87.6233 }, permissions: ['geolocation'] });
@@ -20,7 +24,7 @@ const LEAFLET_CSS = fs.readFileSync(path.resolve(__dirname, 'node_modules/leafle
   await p.route('**/api/interpreter', r => r.fulfill({ status: 200, contentType: 'application/json',
     body: JSON.stringify(mockOverpass(41.8827, -87.6233)) }));
 
-  await p.goto('file://' + path.resolve(__dirname, '../public/index.html'));
+  await p.goto(BASE + '/index.html');
   await p.waitForTimeout(900);
   await p.screenshot({ path: path.resolve(__dirname, 'screenshots/shot1_auth.png') });
 
@@ -39,11 +43,24 @@ const LEAFLET_CSS = fs.readFileSync(path.resolve(__dirname, 'node_modules/leafle
   await p.evaluate(() => document.querySelectorAll('#toasts .toast').forEach(t => t.remove()));
   await p.screenshot({ path: path.resolve(__dirname, 'screenshots/shot4_game.png') });
 
-  // zoomed in: street + building labels, GPS mode
-  await p.evaluate(() => { SS.Game.map.setZoom(19.5); });
-  await p.waitForTimeout(800);
+  // the two zoom presets, driven through the buttons themselves
+  await p.click('.zmBtn[data-z="street"]');
+  await p.waitForTimeout(900);
+  await p.evaluate(() => document.querySelectorAll('#toasts .toast').forEach(t => t.remove()));
+  await p.screenshot({ path: path.resolve(__dirname, 'screenshots/shot7_zoom_street.png') });
+
+  await p.click('.zmBtn[data-z="walk"]');
+  await p.waitForTimeout(900);
   await p.evaluate(() => document.querySelectorAll('#toasts .toast').forEach(t => t.remove()));
   await p.screenshot({ path: path.resolve(__dirname, 'screenshots/shot8_fantasy_zoom.png') });
+
+  // and deeper than any tile exists, where only the drawn town is left
+  await p.evaluate(() => { SS.Game.map.setZoom(22); });
+  await p.waitForTimeout(900);
+  await p.evaluate(() => document.querySelectorAll('#toasts .toast').forEach(t => t.remove()));
+  await p.screenshot({ path: path.resolve(__dirname, 'screenshots/shot8b_deep_zoom.png') });
+  await p.click('.zmBtn[data-z="walk"]');
+  await p.waitForTimeout(600);
 
   // dev mode on, so the panel shows
   await p.click('#modeToggle');

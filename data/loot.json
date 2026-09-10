@@ -1,0 +1,122 @@
+[
+  {
+    "lootTableId": "lt_seed_vermin",
+    "name": "Vermin Scraps",
+    "dropsMin": 0,
+    "dropsMax": 2,
+    "loot": [
+      "itm_seed_potion_sp",
+      "itm_seed_dagger",
+      "itm_seed_shortsword",
+      "itm_seed_gloves",
+      "itm_seed_helm",
+      "itm_seed_ring",
+      "itm_seed_potion_hp_s"
+    ],
+    "chances": [
+      30,
+      12,
+      8,
+      10,
+      6,
+      4,
+      18
+    ],
+    "createdAt": 1789010691206,
+    "updatedAt": 1789010691206
+  },
+  {
+    "lootTableId": "lt_seed_office",
+    "name": "Office Salvage",
+    "dropsMin": 1,
+    "dropsMax": 3,
+    "loot": [
+      "itm_seed_potion_hp_s",
+      "itm_seed_potion_mp",
+      "itm_seed_leathercoat",
+      "itm_seed_shield",
+      "itm_seed_longsword",
+      "itm_seed_rapier",
+      "itm_seed_runewand",
+      "itm_seed_shoulder",
+      "itm_seed_legs",
+      "itm_seed_waraxe",
+      "itm_seed_silkrobe"
+    ],
+    "chances": [
+      35,
+      20,
+      12,
+      10,
+      9,
+      8,
+      7,
+      8,
+      8,
+      6,
+      5
+    ],
+    "createdAt": 1789010691206,
+    "updatedAt": 1789010691206
+  },
+  {
+    "lootTableId": "lt_seed_deep",
+    "name": "Deep Floor Cache",
+    "dropsMin": 1,
+    "dropsMax": 3,
+    "loot": [
+      "itm_seed_potion_hp_l",
+      "itm_seed_chainhauberk",
+      "itm_seed_boots",
+      "itm_seed_belt",
+      "itm_seed_spear",
+      "itm_seed_bow",
+      "itm_seed_amulet",
+      "itm_seed_potion_full",
+      "itm_seed_scroll"
+    ],
+    "chances": [
+      30,
+      12,
+      10,
+      10,
+      9,
+      9,
+      8,
+      12,
+      7
+    ],
+    "createdAt": 1789010691206,
+    "updatedAt": 1789010691206
+  },
+  {
+    "lootTableId": "lt_seed_executive",
+    "name": "Executive Hoard",
+    "dropsMin": 2,
+    "dropsMax": 4,
+    "loot": [
+      "itm_seed_platecuirass",
+      "itm_seed_cloak",
+      "itm_seed_tome",
+      "itm_seed_gem",
+      "itm_seed_potion_full",
+      "itm_seed_amulet",
+      "itm_seed_boots",
+      "itm_seed_belt",
+      "itm_seed_scroll"
+    ],
+    "chances": [
+      14,
+      12,
+      10,
+      4,
+      40,
+      18,
+      16,
+      16,
+      20
+    ],
+    "createdAt": 1789010691206,
+    "updatedAt": 1789010691206
+  }
+]

@@ -1,0 +1,116 @@
+[
+  {
+    "instanceId": "inst_seed_undercroft",
+    "name": "The Undercroft",
+    "zoneId": "",
+    "kind": "crypt",
+    "latitude": 41.8829,
+    "longitude": -87.6222,
+    "radius": 35,
+    "minLevel": 1,
+    "pace": 1,
+    "levels": [
+      {
+        "level": 1,
+        "name": "",
+        "width": 72,
+        "height": 48,
+        "walls": [],
+        "difficulty": 3,
+        "monsters": 3,
+        "spawnTableId": "sp_seed_shallow",
+        "chests": 2,
+        "chestTier": "wooden",
+        "chestLootTableId": "lt_seed_vermin",
+        "hasBoss": true,
+        "bossSpawnTableId": "sp_seed_boss",
+        "experience": 0,
+        "gold": 0
+      },
+      {
+        "level": 2,
+        "name": "",
+        "width": 88,
+        "height": 56,
+        "walls": [
+          {
+            "x": 30,
+            "y": 0,
+            "w": 1.4,
+            "h": 34
+          },
+          {
+            "x": 30,
+            "y": 44,
+            "w": 1.4,
+            "h": 12
+          },
+          {
+            "x": 58,
+            "y": 18,
+            "w": 1.4,
+            "h": 38
+          },
+          {
+            "x": 30,
+            "y": 18,
+            "w": 29,
+            "h": 1.4
+          }
+        ],
+        "difficulty": 5,
+        "monsters": 4,
+        "spawnTableId": "sp_seed_middle",
+        "chests": 2,
+        "chestTier": "wooden",
+        "chestLootTableId": "lt_seed_office",
+        "hasBoss": false,
+        "bossSpawnTableId": "",
+        "experience": 0,
+        "gold": 0
+      }
+    ],
+    "active": true,
+    "timeStart": "",
+    "timeEnd": "",
+    "days": [],
+    "respawnMinutes": 240,
+    "notes": "Under the east wing. The stairs keep going after they should stop."
+  },
+  {
+    "instanceId": "inst_seed_stacks",
+    "name": "The Stacks",
+    "zoneId": "",
+    "kind": "vault",
+    "latitude": 41.8824,
+    "longitude": -87.62435,
+    "radius": 30,
+    "minLevel": 4,
+    "pace": 1.5,
+    "levels": [
+      {
+        "level": 1,
+        "name": "",
+        "width": 96,
+        "height": 60,
+        "walls": [],
+        "difficulty": 6,
+        "monsters": 4,
+        "spawnTableId": "sp_seed_deep",
+        "chests": 3,
+        "chestTier": "wooden",
+        "chestLootTableId": "lt_seed_deep",
+        "hasBoss": true,
+        "bossSpawnTableId": "sp_seed_boss",
+        "experience": 0,
+        "gold": 0
+      }
+    ],
+    "active": true,
+    "timeStart": "",
+    "timeEnd": "",
+    "days": [],
+    "respawnMinutes": 360,
+    "notes": "Nobody has filed anything here in a long time."
+  }
+]

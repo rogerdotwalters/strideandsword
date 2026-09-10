@@ -1,11 +1,12 @@
 const { chromium } = require('playwright');
 const path = require('path');
+const { serve, BASE } = require('./serve');
 const { mockOverpass } = require('./mock-osm');
 
 /* A stand-in for Leaflet. The CDN is unreachable from this sandbox, so this
    exercises the same map code paths the real library would take. */
 const LEAFLET_STUB = `
-window.__mapCalls = { markers: 0, circles: 0, polygons: 0, polylines: 0, setView: 0, panTo: 0, removed: 0 };
+window.__mapCalls = { markers: 0, circles: 0, polygons: 0, polylines: 0, rects: 0, images: 0, setView: 0, panTo: 0, removed: 0 };
 (function(){
   function Layer(kind){
     this.kind = kind; this._h = {}; this._tooltip = null;
@@ -32,9 +33,16 @@ window.__mapCalls = { markers: 0, circles: 0, polygons: 0, polylines: 0, setView
     map: function(id, o){
       var m = { _layers: [], _h: {}, options: o || {} };
       m._zoom = (o && o.zoom) || 18;
-      m.setView = function(ll, z){ window.__mapCalls.setView++; if(z!=null) m._zoom=z; return m; };
+      m.setView = function(ll, z){
+        window.__mapCalls.setView++; m._center = ll;
+        var changed = z != null && z !== m._zoom;
+        if (z != null) m._zoom = z;
+        if (changed) m.fire('zoomend');       // real Leaflet does too
+        return m;
+      };
       m.setZoom = function(z){ m._zoom = z; m.fire('zoomend'); return m; };
       m.getZoom = function(){ return m._zoom; };
+      m.getCenter = function(){ return m._center || { lat: 0, lng: 0 }; };
       m.panTo = function(){ window.__mapCalls.panTo++; return m; };
       m.on = function(e,f){ (m._h[e] = m._h[e] || []).push(f); return m; };
       m.fire = function(e,a){ (m._h[e]||[]).forEach(function(f){ f(a); }); };
@@ -49,8 +57,18 @@ window.__mapCalls = { markers: 0, circles: 0, polygons: 0, polylines: 0, setView
     polyline: function(pts,o){ window.__mapCalls.polylines++; var l = new Layer('polyline'); l.pts=pts; l.options=o; return l; },
     polygon: function(pts,o){ window.__mapCalls.polygons++; var l = new Layer('polygon'); l.pts=pts; l.options=o; return l; },
     circle: function(){ window.__mapCalls.circles++; return new Layer('circle'); },
+    rectangle: function(bounds, o){
+      window.__mapCalls.rects++; var l = new Layer('rectangle'); l.bounds = bounds; l.options = o; return l;
+    },
     divIcon: function(o){ return o; },
     marker: function(ll, o){ window.__mapCalls.markers++; var l = new Layer('marker'); l.latlng = ll; l.opts = o; return l; },
+    imageOverlay: function(src, bounds, o){
+      window.__mapCalls.images++;
+      var l = new Layer('image'); l.src = src; l.bounds = bounds; l.options = o;
+      l.setBounds = function(b){ l.bounds = b; return l; };
+      return l;
+    },
+    latLngBounds: function(b){ return b; },
     DomEvent: { stop: function(){}, stopPropagation: function(){}, preventDefault: function(){} }
   };
 })();
@@ -88,7 +106,7 @@ async function run(withLeaflet, withOverpass) {
     catch (e) { fail++; console.log('  FAIL ' + name + '  — ' + String(e.message).split('\n')[0]); }
   };
 
-  await page.goto('file://' + path.resolve(__dirname, '../public/index.html'));
+  await page.goto(BASE + '/index.html');
   await page.waitForTimeout(1200);
 
   await step('boots to auth screen', async () => {
@@ -194,10 +212,37 @@ async function run(withLeaflet, withOverpass) {
                native: t.options.maxNativeZoom, zoom: m.getZoom() };
     });
     if (r.skipped) return 'no map in this mode';
-    if (r.mapMax <= 19) throw new Error('map maxZoom still ' + r.mapMax);
+    if (r.mapMax < 24) throw new Error('map maxZoom only ' + r.mapMax);
     if (r.native !== 19) throw new Error('maxNativeZoom is ' + r.native);
-    if (r.tileMax <= 19) throw new Error('tile maxZoom still ' + r.tileMax);
-    return 'zoom ' + r.zoom + ' with native tiles capped at ' + r.native;
+    if (r.tileMax < 24) throw new Error('tile maxZoom only ' + r.tileMax);
+    return 'zoom ' + r.zoom + ' of ' + r.mapMax + ', native tiles capped at ' + r.native;
+  });
+
+  await step('the two zoom presets, and neither in between', async () => {
+    const r = await page.evaluate(() => {
+      const g = SS.Game, out = {};
+      if (!g.map) return { skipped: true };
+      const lit = () => [...document.querySelectorAll('#zoomModes .zmBtn')]
+        .filter(b => b.classList.contains('on')).map(b => b.dataset.z);
+      document.querySelector('.zmBtn[data-z="street"]').click();
+      out.streetZoom = g.map.getZoom(); out.streetLit = lit();
+      document.querySelector('.zmBtn[data-z="walk"]').click();
+      out.walkZoom = g.map.getZoom(); out.walkLit = lit();
+      out.remembered = SS.settings().mapZoom;      // survives a recentre
+      g.map.setZoom(22);                           // deeper than either preset
+      out.freeLit = lit();
+      out.buildings = document.getElementById('map').classList.contains('zBuildings');
+      document.querySelector('.zmBtn[data-z="walk"]').click();
+      return out;
+    });
+    if (r.skipped) return 'no map in this mode';
+    if (!(r.streetZoom < r.walkZoom)) throw new Error('street ' + r.streetZoom + ' not wider than walk ' + r.walkZoom);
+    if (r.streetLit.join() !== 'street') throw new Error('street lit: ' + r.streetLit);
+    if (r.walkLit.join() !== 'walk') throw new Error('walk lit: ' + r.walkLit);
+    if (r.remembered !== r.walkZoom) throw new Error('settings kept ' + r.remembered);
+    if (r.freeLit.length) throw new Error('a preset stayed lit at zoom 22: ' + r.freeLit);
+    if (!r.buildings) throw new Error('buildings not shown at deep zoom');
+    return 'street ' + r.streetZoom + ' / walk ' + r.walkZoom + ', neither at 22';
   });
 
   await step('race + class modifiers applied', async () => {
@@ -218,9 +263,12 @@ async function run(withLeaflet, withOverpass) {
     return info.n + ' nodes ' + JSON.stringify(info.types);
   });
 
-  await step('nodes sit inside the zone radius and are spaced apart', async () => {
+  await step('procedural nodes sit inside the zone radius and are spaced apart', async () => {
     const bad = await page.evaluate(() => {
-      const z = SS.Game.zone, ns = SS.Game.nodes;
+      const z = SS.Game.zone;
+      // Only the scattered ones. A hand-placed location goes exactly where it
+      // was put, radius and spacing included, and that is the point of it.
+      const ns = SS.Game.nodes.filter(n => !n.locationId);
       const H = (a, b, c, d) => {
         const R = 6371000, tr = x => x * Math.PI / 180;
         const dLat = tr(c - a), dLon = tr(d - b);
@@ -235,10 +283,11 @@ async function run(withLeaflet, withOverpass) {
       });
       for (let i = 0; i < ns.length; i++) for (let j = i + 1; j < ns.length; j++)
         if (H(ns[i].latitude, ns[i].longitude, ns[j].latitude, ns[j].longitude) < 33) tooClose++;
-      return { outside, tooClose, minD: Math.round(minD), maxD: Math.round(maxD), radius: z.radius };
+      return { outside, tooClose, count: ns.length,
+               minD: Math.round(minD), maxD: Math.round(maxD), radius: z.radius };
     });
     if (bad.outside || bad.tooClose) throw new Error(JSON.stringify(bad));
-    return 'spread ' + bad.minD + '–' + bad.maxD + ' m within ' + bad.radius + ' m';
+    return bad.count + ' procedural, spread ' + bad.minD + '–' + bad.maxD + ' m within ' + bad.radius + ' m';
   });
 
   if (withOverpass) {
@@ -402,9 +451,30 @@ async function run(withLeaflet, withOverpass) {
       if (r.polys !== 36) throw new Error('polygons: ' + r.polys);
       if (r.lines !== 19) throw new Error('polylines: ' + r.lines);
       if (r.streetLabels !== 18) throw new Error('expected 18 named-segment labels, got ' + r.streetLabels);
-      if (r.tileOpacity !== 0.3) throw new Error('tiles not dimmed under the overlay');
+      // 0.3 normally; deep zoom fades it further so the drawn town takes over.
+      if (!(r.tileOpacity > 0 && r.tileOpacity <= 0.3))
+        throw new Error('tiles not dimmed under the overlay: ' + r.tileOpacity);
       return r.polys + ' buildings, ' + r.lines + ' roads, ' + r.streetLabels +
              ' road labels, e.g. "' + r.tooltip + '"';
+    });
+
+    await step('the real map fades where the drawn one takes over', async () => {
+      const r = await page.evaluate(() => {
+        const g = SS.Game, out = {};
+        const at = z => { g.map.setZoom(z); return g.tiles.opacity; };
+        out.near = at(18);           // inside native tile range
+        out.deep = at(21);           // past it, where the raster goes soft
+        SS.saveSettings({ fantasyMap: false });
+        out.plain = at(18);          // no overlay at all
+        SS.saveSettings({ fantasyMap: true });
+        at(19.5);
+        return out;
+      });
+      if (!withOverpass) return 'no overlay to fade under';
+      if (r.near !== 0.3) throw new Error('near zoom opacity ' + r.near);
+      if (!(r.deep < r.near)) throw new Error('deep zoom did not fade: ' + r.deep);
+      if (r.plain !== 1) throw new Error('plain map dimmed to ' + r.plain);
+      return r.near + ' close in, ' + r.deep.toFixed(3) + ' past tile range, 1 with no overlay';
     });
 
     await step('map layers drawn', async () => {
@@ -701,6 +771,9 @@ async function run(withLeaflet, withOverpass) {
 }
 
 (async () => {
+  // The game fetches its database out of data/*.json, and fetch() will not
+  // touch a file:// URL — so the suites run against a real origin now.
+  await serve();
   let f = 0;
   f += await run(true, true);    // map + fantasy overlay
   f += await run(true, false);   // map, Overpass unreachable
