@@ -33,6 +33,15 @@ Object.assign(Game, {
         // Everything you have authored, in one list, with a way straight to it.
         // This is the whole point of the dev panel: place something in the map
         // editor, come here, and be standing on it in two clicks.
+        // What the spawner is up to, and two ways to hurry it along. The
+        // schedule is measured in hours, so without these you would be
+        // waiting a long time to see whether any of it works.
+        '<div class="sect tiny">Spawning</div>' +
+        '<p class="devNote" id="dvSpawn"></p>' +
+        '<div class="grid2">' +
+          '<button class="btn sm" id="dvSpawnNow">Force a spawn</button>' +
+          '<button class="btn sm danger" id="dvSpawnReset">Clear spawned</button>' +
+        "</div>" +
         '<div class="sect tiny">Authored content</div>' +
         '<select class="input" id="dvJump"></select>' +
         '<div class="grid2">' +
@@ -67,6 +76,29 @@ Object.assign(Game, {
     $("#dvWander").onclick = () => this.wander();
     $("#dvStop").onclick = () => { if (this._simWalk) { clearInterval(this._simWalk); this._simWalk = null; UI.toast("Sim stopped.", "info", 1400); } };
     $("#dvSeed").onclick = () => this.seedTestData();
+
+    $("#dvSpawnNow").onclick = () => {
+      if (typeof Spawner === "undefined" || !this.zone) { UI.toast("No zone yet.", "bad"); return; }
+      // Clear the gap and the day's allowance so something actually lands,
+      // then run the normal tick — no special spawn path to get out of step.
+      const st = Spawner.state(this.zone.zoneId);
+      st.nextDungeonAt = 0;
+      st.target = Math.max(st.target || 0, (st.spawned || 0) + 1);
+      Spawner.saveState(this.zone.zoneId, st);
+      const n = this.runSpawner({ force: true });
+      UI.toast(n ? "Spawned " + n + "." : "Nothing to spawn — no places surveyed yet.",
+               n ? "good" : "bad", 2600);
+      this.refreshSpawnReadout();
+    };
+    $("#dvSpawnReset").onclick = () => {
+      if (typeof Spawner === "undefined" || !this.zone) return;
+      const n = Spawner.reset(this.zone);
+      this.syncAuthoredLocations();
+      if (!this.mapless) { this.drawDungeons(); this.drawInstanceDoors(); }
+      this.fillDevJump();
+      this.refreshSpawnReadout();
+      UI.toast("Removed " + n + " spawned.", "info", 2000);
+    };
 
     $("#dvJumpGo").onclick = () => this.devJump("walk");
     $("#dvJumpTp").onclick = () => this.devJump("teleport");
@@ -160,7 +192,22 @@ Object.assign(Game, {
     }, 60);
   },
 
+  /** What the spawner has live, and what it is waiting on. */
+  refreshSpawnReadout() {
+    const out = $("#dvSpawn");
+    if (!out) return;
+    if (typeof Spawner === "undefined" || !this.zone) { out.textContent = "no zone"; return; }
+    const s = Spawner.status(this.zone);
+    const mins = (ms) => ms ? Math.max(1, Math.round(ms / 60000)) + " min" : "—";
+    out.innerHTML =
+      "places surveyed " + s.places + "<br>" +
+      "dungeons " + s.dungeons + " · expires in " + mins(s.dungeonExpiresInMs) +
+        " · next in " + mins(s.nextDungeonInMs) + "<br>" +
+      "instances " + s.instances + " live · " + s.instancesToday + "/" + s.instanceTarget + " today";
+  },
+
   refreshDevReadout() {
+    this.refreshSpawnReadout();
     const out = $("#dvOut");
     if (!out) return;
     const p = Loc.last;

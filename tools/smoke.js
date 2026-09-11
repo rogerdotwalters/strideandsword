@@ -297,7 +297,7 @@ async function run(withLeaflet, withOverpass) {
       const w = await page.evaluate(() => SS.Game.world &&
         ({ b: SS.Game.world.buildings.length, r: SS.Game.world.roads.length }));
       if (!w) throw new Error('no world after ' + overpassHits + ' overpass calls');
-      if (w.b !== 36) throw new Error('expected 36 buildings (shed filtered), got ' + w.b);
+      if (w.b !== 37) throw new Error('expected 37 buildings (shed filtered), got ' + w.b);
       if (w.r !== 19) throw new Error('expected 19 road ways, got ' + w.r);
       return w.b + ' buildings, ' + w.r + ' roads from ' + overpassHits + ' request(s)';
     });
@@ -323,7 +323,7 @@ async function run(withLeaflet, withOverpass) {
       if (r.badKey) throw new Error('bad key shape: ' + r.badKey);
       if (r.missing.length) throw new Error('building row missing ' + r.missing.join(','));
       if (!r.keyMatchesCoords) throw new Error('key does not match its own coordinates');
-      if (r.b !== 36) throw new Error('lost buildings to key collisions: ' + r.b);
+      if (r.b !== 37) throw new Error('lost buildings to key collisions: ' + r.b);
       if (r.s !== 19 || r.uniqueWays !== 19) throw new Error('lost streets to key collisions: ' +
         r.s + ' rows / ' + r.uniqueWays + ' ways');
       return r.b + ' building rows, ' + r.s + ' street rows, e.g. "' + r.sample.name + '" (' + r.sample.kindLabel + ')';
@@ -407,18 +407,20 @@ async function run(withLeaflet, withOverpass) {
       return r.anchored + '/' + r.total + ' sites: ' + r.sample.join(', ');
     });
 
-    await step('atlas exports as a two-table JSON document', async () => {
+    await step('atlas exports as a three-table JSON document', async () => {
       const r = await page.evaluate(() => {
         const d = SS.Atlas.export();
         const round = JSON.parse(JSON.stringify(d));
         return { format: round.format, tables: Object.keys(round.tables),
                  b: Object.keys(round.tables.buildings).length,
                  s: Object.keys(round.tables.streets).length,
+                 p: Object.keys(round.tables.places || {}).length,
                  keying: round.keying };
       });
-      if (r.tables.join(',') !== 'buildings,streets') throw new Error('tables: ' + r.tables);
-      if (!r.b || !r.s) throw new Error('empty tables');
-      return r.format + ': ' + r.b + ' buildings + ' + r.s + ' streets, keyed by ' + r.keying;
+      if (r.tables.join(',') !== 'buildings,streets,places') throw new Error('tables: ' + r.tables);
+      if (!r.b || !r.s || !r.p) throw new Error('empty tables');
+      return r.format + ': ' + r.b + ' buildings + ' + r.s + ' streets + ' + r.p +
+             ' places, keyed by ' + r.keying;
     });
   } else {
     await step('Overpass failure degrades to the plain map', async () => {
@@ -448,7 +450,7 @@ async function run(withLeaflet, withOverpass) {
         };
       });
       if (!withOverpass) return 'no overlay expected (Overpass down)';
-      if (r.polys !== 36) throw new Error('polygons: ' + r.polys);
+      if (r.polys !== 37) throw new Error('polygons: ' + r.polys);
       if (r.lines !== 19) throw new Error('polylines: ' + r.lines);
       if (r.streetLabels !== 18) throw new Error('expected 18 named-segment labels, got ' + r.streetLabels);
       // 0.3 normally; deep zoom fades it further so the drawn town takes over.

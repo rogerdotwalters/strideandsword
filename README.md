@@ -106,6 +106,8 @@ failing silently — see the location gate and its **Show diagnostics** button.
         zones.js      zones and procedural node scatter
         location.js   geolocation, distance accumulation, proximity
         art.js        the PNGs that sit on the map
+        placement.js  the scoring core: what goes where, and how often
+        spawner.js    the lifecycle: what appears when, and what expires
         walk.js       the pedometer and the daily goal
         dungeons.js   dungeon runs: entering, walking a floor, descending
         instances.js  instance runs: steering, walls, roaming monsters
@@ -149,6 +151,7 @@ any editor:
     data/dungeons.json    2 sample dungeons
     data/instances.json   2 sample instances
     data/players.json     test logins — `tester` / `walk1234`
+    data/spawn-rules.json the spawn weights — see below
 
 On boot, `js/core/db.js` fetches all of it and seeds any table that has **never
 been written**. A table you have edited — or deliberately emptied — is left
@@ -225,6 +228,12 @@ Each location holds a **building type**, a **spawn table** (or none), a
 A closed location shows a clock on the game map and refuses to be engaged.
 A location whose cooldown has elapsed comes back on the next position fix.
 
+A location is nudged onto something real once the street survey lands, and
+that nudge is weighted now rather than nearest-wins: what the building is, what
+it sits inside, and how near a road it is all count (`locations` in
+`data/spawn-rules.json`). Nothing is excluded — the dullest building in range is
+still a possible answer, just a less likely one than the market by the road.
+
 Locations belong to a **zone**. A zone can be marked *hand-placed only*, and
 the game then stops scattering procedural sites inside it — the procedural ones
 stay in storage untouched, so the flag is reversible. Zones can be created,
@@ -271,6 +280,88 @@ what changed.
 One thing to know: a zone created in the map editor belongs to the *world*, not
 to a player, so every character sees it. Without that, content authored in the
 editor was invisible in the game — which is exactly the bug it fixes.
+
+## Where things spawn, and how often
+
+Everything the game puts on the map by itself is placed by one scoring core
+(`js/world/placement.js`), tuned from one file you are meant to edit
+(`data/spawn-rules.json`). Nothing there is code.
+
+**A weight is never a filter.** Every category keeps a floor, every category
+outside its hours keeps a multiplier rather than a zero, and `other` — anywhere
+public we could not categorise — always carries some weight. An office with no
+mapped parks and no mapped shops still gets dungeons; they just land on
+ordinary buildings. There is no empty case to special-case.
+
+### The two dials
+
+**`contrast`** decides how much any of this is noticeable. Raw weights are
+raised to this power before anything is picked, so the default 0.55 turns a
+ten-to-one spread into about three-and-a-half to one — a park is clearly
+favoured without the corner shop feeling dead. Set it to 1 to feel the weights
+exactly as written, or 0 to make everywhere equally likely.
+
+**`outOfWindowMultiplier`** is what a category is worth outside its hours.
+0.15, not 0: a grocery store at 3am is possible, just uncommon.
+
+### Categories
+
+Places come from OpenStreetMap and fall into five coarse buckets — `park`,
+`food`, `civic`, `transit`, `other`. Five you can hold in your head beat twenty
+you have to look up, and the weights file addresses them by name.
+
+At the default weights a dungeon lands on a park about a third of the time, a
+food place a quarter, and an ordinary building about one time in ten.
+
+### Dungeons: one at a time
+
+One live in the zone, always. It lasts about three hours — longer at a park,
+shorter at a car park, because the lifetime is weighted too — or until you
+clear it, and then the next appears somewhere else about fifteen minutes later.
+That fifteen minutes is deliberately a gap, not an overlap: it is what gives a
+cleared dungeon a sense of ending.
+
+The separation rule asks for 2000 ft between dungeons. A zone is only 640 m
+across, so that is usually unsatisfiable — the rule then stops being a hard
+floor and becomes a push, picking from the furthest quarter of what is
+available. In practice: a spawn never lands on top of a dungeon you placed by
+hand, and a hand-placed dungeon never blocks the spawner, because it does not
+fill the single slot.
+
+### Instances: once or twice a day
+
+One or two per zone per day, rolled once and stored, so a reload does not
+reroll what you are getting. They arrive inside the hours their category
+keeps — parks 06:00–09:00 and 16:00–19:00, food 11:00–14:00 and 17:00–20:00.
+
+**Windows decide *when*; weights decide *where*.** A category with no hours —
+`civic`, say — can win the spot once something has opened the door, but it
+cannot open the door itself. Without that distinction the day's allowance would
+be spent at three in the morning on whatever happened to have no opening times.
+
+### What it spawns
+
+Clones of what you have already authored. Any hand-placed dungeon is a template
+unless it carries `spawnable: false`, weighted by an optional `spawnWeight`, so
+placing one good dungeon teaches the spawner what a dungeon looks like here.
+With nothing authored at all it falls back to a plain generated one.
+
+A spawned row is an ordinary row in `content_dungeons` or `content_instances`,
+marked `origin: "auto"` with an `expiresAt`. Everything downstream — the pin,
+the door prompt, the run — treats it like any other, which is the point: no
+parallel code path to keep honest. It shows in the map editor tagged **auto**,
+and you can edit it like anything else, knowing it will be swept when it
+expires. The spawner only ever removes rows it marked, and never one you are
+standing inside.
+
+### No timers
+
+Inside a dungeon, walking is the clock, and that stays true. These rules are
+wall-clock, so rather than ticking in the background the spawner recomputes
+"should something be here now?" whenever the game already happens to look — on
+a position fix, and when the tab comes back to the front, rate-limited to about
+twice a minute. Nothing runs while nobody is watching, and the answer is the
+same either way because it is derived from the time rather than accumulated.
 
 ## Dungeons
 
@@ -423,7 +514,7 @@ collapse into a ⋯ sheet instead of wrapping.
     cd tools
     npm install                  # playwright + leaflet, for the tests only
     npm run serve                # http://localhost:8000
-    npm test                     # 257 assertions, ~15 minutes
+    npm test                     # 281 assertions, ~17 minutes
 
 Edit a file and reload. There is no build step and nothing to regenerate — the
 files you edit are the files that get served, which is the point of the
@@ -443,6 +534,7 @@ for you, not for them.
 | `npm run test:responsive` | 31 assertions: both editors driven on an emulated iPhone (390×844, touch) and at 1440×900. Pane switching, the ⋯ sheet, card-view tables, placing a location by tapping the map, no sideways overflow, and no touch target under 40 px — including the zoom presets, which must not end up buried under another control, the dungeon layer switch, placing both a location and a dungeon by tap, and a refused placement leaving the button usable. |
 | `npm run test:dungeons` | 21 assertions: drawing and resizing a footprint, floors inheriting and reordering, rectangle geometry in metres, then a whole run walked in the game — entering, a real clicked fight, a chest, stepping out and picking it back up, the stairs down, and the cooldown at the bottom. |
 | `npm run test:instances` | 24 assertions: authoring a door and its levels, drawn lines squaring onto an axis, then inside — the floor being exactly the rectangle asked for with the drawn walls solid, everything on it reachable from the door by flood fill, the dial turning without moving you, pace, walls that stop you without refunding the walk, monsters that step only when you do and close when they see you, contact fights, chests, the boss holding the stairs, the level change, and the cooldown. |
+| `npm run test:spawning` | 24 assertions: parks and shops arriving in the Atlas as a third feature class, a park as a polygon and a cafe as a point, point-in-polygon, the category distribution over 6000 rolls, the contrast dial at 0 / 0.55 / 1, many buildings failing to outvote few parks, time windows including one that wraps midnight, out-of-hours staying pickable, the three-hour expiry and fifteen-minute gap, clearing, a dungeon you are standing in surviving its own expiry, hand-placed rows untouched, and the once-or-twice-a-day roll holding across a reload. The clock is injected, so none of it waits. |
 | `npm run test:permissions` | 18 assertions across four origins: no permission on `file://`, declining the gate, `http://localhost`, a LAN address, already granted. |
 | `npm run balance` | Simulates 400 fights per class/level/difficulty cell and prints win rates. Run it after touching any combat number. |
 | `npm run shots` | Screenshots into `tools/screenshots/` using the real Leaflet from `node_modules`. |

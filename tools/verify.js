@@ -52,6 +52,35 @@ const OUT = path.resolve(__dirname, 'screenshots');
   await p.waitForTimeout(900);
   await p.screenshot({ path: path.join(OUT, 'v-map-with-art.png') });
 
+  // --- spawning: force one out and look at it on the map.
+  console.log('atlas places:', await p.evaluate(() => SS.Atlas.stats().placesByCategory));
+  console.log('spawned:', await p.evaluate(() => {
+    const zone = SS.Game.zone;
+    // ONE clock for the whole sequence, including the readout. Mixing an
+    // injected time with Date.now() gives a nonsense countdown — the container
+    // runs in the small hours, so a 15-minute gap reads as nine hours.
+    const noon = new Date(); noon.setHours(12, 30, 0, 0);
+    const T = noon.getTime();
+    SS.Spawner.reset(zone);
+    SS.Spawner.tick(zone, { now: T });
+    const st = SS.Spawner.state(zone.zoneId);
+    st.target = 2; SS.Spawner.saveState(zone.zoneId, st);
+    SS.Spawner.tick(zone, { now: T + 60000 });
+    const auto = (t) => SS.Content.list(t).filter(r => r.origin === 'auto')
+      .map(r => r.name + ' [' + r.placeCategory + ']');
+    return { dungeons: auto('dungeons'), instances: auto('instances'),
+             status: SS.Spawner.status(zone, T + 60000) };
+  }));
+  await p.evaluate(() => { SS.Game.drawDungeons(); SS.Game.drawInstanceDoors(); SS.Game.map.setZoom(16); });
+  await p.waitForTimeout(900);
+  await p.screenshot({ path: path.join(OUT, 'v-spawned-map.png') });
+
+  // The dev panel's spawn readout.
+  await p.evaluate(() => { SS.saveSettings({ locationMode: 'sim' }); SS.Game.buildDevPanel(true); });
+  await p.waitForTimeout(500);
+  await p.screenshot({ path: path.join(OUT, 'v-dev-panel.png') });
+  await p.evaluate(() => { SS.saveSettings({ locationMode: 'gps' }); SS.Game.buildDevPanel(); });
+
   // Into the seeded instance, with the walls its second level carries.
   await p.evaluate(() => {
     const d = SS.Content.list('instances')[0];

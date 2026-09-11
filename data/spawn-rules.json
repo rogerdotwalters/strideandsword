@@ -1,0 +1,76 @@
+{
+  "_readme": [
+    "This is the file to edit when you want spawning to feel different. Nothing",
+    "here needs code changes — reload the game and the new numbers apply.",
+    "",
+    "Weights are relative, never absolute, and never a filter. A category with a",
+    "low weight still spawns, just rarely. Nothing is ever zero.",
+    "",
+    "THE TWO DIALS WORTH UNDERSTANDING:",
+    "",
+    "  contrast  — how much the weights actually matter. The raw weight is",
+    "              raised to this power before anything is picked, so 0.55 turns",
+    "              a 10-vs-1 spread into about 3.5-vs-1. Set it to 1 to feel the",
+    "              weights exactly as written, or 0 to make every category",
+    "              equally likely. Lower = less noticeable difference between",
+    "              popular and unpopular places.",
+    "",
+    "  outOfWindowMultiplier — what a category is worth outside its hours. This",
+    "              is a multiplier, not a gate: a grocery store at 3am is still",
+    "              possible, just uncommon.",
+    "",
+    "Times are the device's local clock, 24-hour. A window whose end is before",
+    "its start wraps past midnight, so [\"22:00\",\"02:00\"] works as you'd expect."
+  ],
+
+  "contrast": 0.55,
+
+  "dungeons": {
+    "_note": "One alive per zone at a time. Clear it and the next appears after regapMinutes, somewhere else.",
+    "alive": 1,
+    "minSeparationM": 610,
+    "regapMinutes": 15,
+    "lifetimeMinutes": 180,
+    "minWeight": 0.05,
+    "outOfWindowMultiplier": 1,
+    "categories": {
+      "park":    { "weight": 10, "radiusM": 70, "lifetimeMultiplier": 1.2, "windows": [] },
+      "food":    { "weight": 6,  "radiusM": 45, "lifetimeMultiplier": 1.0, "windows": [] },
+      "civic":   { "weight": 4,  "radiusM": 50, "lifetimeMultiplier": 1.0, "windows": [] },
+      "transit": { "weight": 2,  "radiusM": 40, "lifetimeMultiplier": 0.8, "windows": [] },
+      "other":   { "weight": 1,  "radiusM": 40, "lifetimeMultiplier": 0.7, "windows": [] }
+    }
+  },
+
+  "instances": {
+    "_note": "One or two per zone per day, rolled once and stable across reloads. Time windows decide where, not whether.",
+    "perDayMin": 1,
+    "perDayMax": 2,
+    "minSeparationM": 610,
+    "lifetimeMinutes": 180,
+    "minWeight": 0.05,
+    "outOfWindowMultiplier": 0.15,
+    "categories": {
+      "park":    { "weight": 10, "radiusM": 40, "lifetimeMultiplier": 1.2,
+                   "windows": [["06:00", "09:00"], ["16:00", "19:00"]] },
+      "food":    { "weight": 8,  "radiusM": 35, "lifetimeMultiplier": 1.0,
+                   "windows": [["11:00", "14:00"], ["17:00", "20:00"]] },
+      "civic":   { "weight": 2,  "radiusM": 35, "lifetimeMultiplier": 1.0, "windows": [] },
+      "transit": { "weight": 1,  "radiusM": 30, "lifetimeMultiplier": 0.8, "windows": [] },
+      "other":   { "weight": 0.5, "radiusM": 30, "lifetimeMultiplier": 0.7, "windows": [] }
+    }
+  },
+
+  "locations": {
+    "_note": "The 11 procedural sites per zone. These are placed then nudged onto something real; this decides what 'something real' means.",
+    "minWeight": 0.1,
+    "snapRangeM": 75,
+    "road": { "idealM": 25, "bonus": 6, "falloffM": 60 },
+    "insideCategory": { "park": 8, "civic": 5, "food": 4, "transit": 2, "other": 0 },
+    "buildingKind": {
+      "market": 7, "tavern": 5, "guildhall": 4, "library": 4, "temple": 3,
+      "bathhouse": 3, "apothecary": 3, "counting": 2, "granary": 2, "smithy": 2,
+      "foundry": 2, "keep": 2, "barracks": 1, "stable": 1, "tower": 1, "cottage": 1
+    }
+  }
+}

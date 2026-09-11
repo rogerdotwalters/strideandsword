@@ -124,6 +124,98 @@ const Content = (function () {
     counting:   { label: "counting house",icon: "\ud83e\ude99", color: "#c9a63a" }
   };
 
+  /* ------------------------------------------------------------ public places
+     A "place" is somewhere in the real world that a dungeon or an instance can
+     be attached to: a park, a supermarket, a library. Separate from a building
+     because a park has no building tag at all, and because what matters here
+     is the *category* — how often something should spawn there — not what the
+     fantasy map calls it.
+
+     Categories are deliberately coarse. Five buckets you can hold in your head
+     beat twenty you have to look up, and the weights file addresses them by
+     name. `other` is the catch-all that keeps any area playable: an office
+     with no mapped parks or shops still gets dungeons, on ordinary buildings. */
+  const PLACE_CATEGORIES = {
+    park:    { label: "parks & recreation", icon: "\ud83c\udf33", color: "#5fae7a" },
+    food:    { label: "food & groceries",   icon: "\ud83d\uded2", color: "#c9a63a" },
+    civic:   { label: "civic & public",     icon: "\ud83c\udfdb\ufe0f", color: "#7f9fc0" },
+    transit: { label: "transit & parking",  icon: "\ud83d\ude8f", color: "#8899b0" },
+    other:   { label: "anywhere else",      icon: "\ud83d\udccd", color: "#8a8f9a" }
+  };
+
+  /**
+   * OSM tag value -> category. Read in order: leisure, landuse, shop, amenity,
+   * tourism. A value that is not here falls through to "other", which is the
+   * point of "other" — an unmapped or unusual tag still plays.
+   */
+  const PLACE_TAGS = {
+    leisure: {
+      park: "park", garden: "park", pitch: "park", playground: "park",
+      recreation_ground: "park", common: "park", dog_park: "park",
+      nature_reserve: "park", sports_centre: "civic", fitness_centre: "civic"
+    },
+    landuse: {
+      recreation_ground: "park", village_green: "park", forest: "park", meadow: "park"
+    },
+    shop: {
+      supermarket: "food", convenience: "food", greengrocer: "food", bakery: "food",
+      butcher: "food", deli: "food", farm: "food",
+      department_store: "civic", mall: "civic"
+    },
+    amenity: {
+      restaurant: "food", cafe: "food", fast_food: "food", food_court: "food",
+      pub: "food", bar: "food", marketplace: "food",
+      library: "civic", townhall: "civic", community_centre: "civic",
+      school: "civic", university: "civic", college: "civic",
+      place_of_worship: "civic", theatre: "civic", cinema: "civic",
+      arts_centre: "civic", hospital: "civic",
+      parking: "transit", bus_station: "transit", ferry_terminal: "transit"
+    },
+    tourism: { museum: "civic", gallery: "civic", attraction: "park", picnic_site: "park" },
+    public_transport: { station: "transit", platform: "transit" }
+  };
+
+  /** The category of a set of OSM tags, and the raw value that decided it. */
+  function placeCategory(tags) {
+    tags = tags || {};
+    for (const field of ["leisure", "landuse", "shop", "amenity", "tourism", "public_transport"]) {
+      const v = tags[field];
+      if (!v) continue;
+      const cat = (PLACE_TAGS[field] || {})[v];
+      if (cat) return { category: cat, osmKind: field + "=" + v };
+      // Tagged with something we do not recognise, but still a public thing.
+      return { category: "other", osmKind: field + "=" + v };
+    }
+    return { category: "other", osmKind: "" };
+  }
+
+  /** Is this tag set worth recording as a place at all? */
+  function isPlaceTagged(tags) {
+    tags = tags || {};
+    return !!(tags.leisure || tags.landuse || tags.shop || tags.amenity ||
+              tags.tourism || tags.public_transport);
+  }
+
+  /**
+   * Is a point inside a polygon ring? Ray casting, which is fifteen lines and
+   * exact for the simple rings OSM gives for a park. Worth doing properly
+   * rather than measuring to the centroid: a park centroid can sit 100 m from
+   * anywhere you would actually walk.
+   */
+  function pointInRing(ring, lat, lng) {
+    if (!ring || ring.length < 3) return false;
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const yi = ring[i][0], xi = ring[i][1];
+      const yj = ring[j][0], xj = ring[j][1];
+      const straddles = (yi > lat) !== (yj > lat);
+      if (!straddles) continue;
+      const xCross = (xj - xi) * (lat - yi) / (yj - yi) + xi;
+      if (lng < xCross) inside = !inside;
+    }
+    return inside;
+  }
+
   /* What a hand-placed location *is*, mirroring the procedural node types. */
   const SITE_KINDS = [
     { key: "combat",   label: "Combat site", icon: "\u2694\ufe0f" },
@@ -1211,6 +1303,7 @@ const Content = (function () {
     markSeen, isSeen, exploredFraction, fogRects, buildFog,
     lineOfSight, stepThrough, instancePreviewSvg,
     BUILDING_KINDS, SITE_KINDS, CHEST_TIERS, DAY_NAMES,
+    PLACE_CATEGORIES, PLACE_TAGS, placeCategory, isPlaceTagged, pointInRing,
     DUNGEON_KINDS, DUNGEON_SHAPES, STOP_KINDS,
     dungeonsFor, dungeonKind, floorName, dungeonCorners, dungeonContains, distanceToDungeon,
     planFloor, dungeonLength, floorRewards,

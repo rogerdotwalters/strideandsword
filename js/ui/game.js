@@ -21,6 +21,7 @@ const Game = {
     this.artLayer = null;
     this.streetLabels = null; this.buildingLabels = null;
     this._locPrompt = false;
+    this._lastSpawnCheck = 0;
   },
 
   start(ch) {
@@ -258,6 +259,7 @@ const Game = {
     // from wherever you actually are.
     const moved = (typeof DB !== "undefined") ? DB.rehomeSeed(this.zone) : 0;
     if (moved) UI.toast("Placed " + moved + " sample sites around you.", "good", 3000);
+    if (typeof Spawner !== "undefined") { try { Spawner.tick(this.zone); } catch (e) {} }
     this.syncAuthoredLocations();
     this.drawZone();
     this.drawNodes();
@@ -267,6 +269,41 @@ const Game = {
     if (Instance.current()) this.enterInstanceView();
     else this.renderInstanceBar();
     this.loadWorld();
+  },
+
+  /**
+   * Give the spawner a turn, and redraw if it did anything.
+   *
+   * This is the whole scheduling mechanism. There is no timer: the question
+   * "should there be a dungeon here right now?" is recomputed whenever the
+   * game already happens to be looking — every position fix, and every time
+   * the tab comes back to the front. Nothing accumulates, so nothing is lost
+   * by not running while the phone is in a pocket.
+   */
+  runSpawner(opts) {
+    opts = opts || {};
+    if (typeof Spawner === "undefined" || !this.zone) return 0;
+    // A rate limit, not a timer. GPS fixes arrive every second or so and the
+    // answer cannot change that fast, so the scan over the Atlas is worth
+    // doing about twice a minute rather than on every one.
+    const now = opts.now || Date.now();
+    if (!opts.force && this._lastSpawnCheck && now - this._lastSpawnCheck < 30000) return 0;
+    this._lastSpawnCheck = now;
+    let n = 0;
+    try {
+      n = Spawner.tick(this.zone, opts);
+    } catch (e) {
+      console.warn("[spawn]", e && e.message);
+      return 0;
+    }
+    if (!n) return 0;
+    this.syncAuthoredLocations();
+    if (!this.mapless) { this.drawDungeons(); this.drawInstanceDoors(); }
+    this.renderDungeonBar();
+    if (!Instance.current()) this.renderInstanceBar();
+    if (this.mapless) this.renderListView();
+    this.fillDevJump();
+    return n;
   },
 
   /**
@@ -280,6 +317,7 @@ const Game = {
     if (!this.zone) { this.ensureZone(); return; }
     const zones = Store.get(K.zones, {}) || {};
     if (zones[this.zone.zoneId]) this.zone = zones[this.zone.zoneId];
+    this.runSpawner();
     const r = this.syncAuthoredLocations();
     if (this.mapless) { this.renderListView(); }
     else {
@@ -525,17 +563,44 @@ const Game = {
   snapNodesToBuildings(world) {
     if (!settings().snapNodesToBuildings || !world.buildings.length) return;
     const taken = new Set(this.nodes.map(n => n.anchorKey).filter(Boolean));
-    const MIN_GAP = 34;   // the same spacing the generator guarantees
+    const MIN_GAP = 34;         // the same spacing the generator guarantees
+    const MIN_FROM_HOME = 45;  // and the same inner radius of its ring
+    const range = +Placement.rulesFor("locations").snapRangeM || 75;
     let moved = 0;
     this.nodes.forEach(n => {
       if (n.anchorKey || n.status === "cleared") return;
       // Never move a hand-placed site. You put it on that doorway on purpose,
       // and shifting it onto the nearest building would quietly undo that.
       if (n.locationId) return;
-      // Nearest building that doesn't shove this site onto a neighbour.
-      const near = Atlas.nearBuildings(n.latitude, n.longitude, 75, taken).find(cand =>
-        this.nodes.every(o => o === n ||
-          haversine(cand.row.latitude, cand.row.longitude, o.latitude, o.longitude) >= MIN_GAP));
+
+      // Every building in range that doesn't shove this site onto a neighbour,
+      // and doesn't drag it inside the ring the generator placed it in. That
+      // second rule matters more now than it used to: nearest-wins rarely moved
+      // a node far, but a weighted pick will happily reach the full range, and
+      // a site pulled in to 34 m undoes the "nothing spawns on top of you"
+      // floor that generateNodes works to keep.
+      const zc = this.zone;
+      const legal = Atlas.nearBuildings(n.latitude, n.longitude, range, taken).filter(cand => {
+        if (zc) {
+          const fromHome = haversine(zc.centerLatitude, zc.centerLongitude,
+                                     cand.row.latitude, cand.row.longitude);
+          if (fromHome < MIN_FROM_HOME || fromHome > zc.radius) return false;
+        }
+        return this.nodes.every(o => o === n ||
+          haversine(cand.row.latitude, cand.row.longitude, o.latitude, o.longitude) >= MIN_GAP);
+      });
+      if (!legal.length) return;
+
+      // Weighted rather than nearest-wins: what the building is, what it sits
+      // inside, and how near a road it is all count. Nothing is excluded — the
+      // dullest building in range is still a possible answer, just a less
+      // likely one than the market by the road.
+      const scored = legal.map(cand => ({
+        latitude: cand.row.latitude, longitude: cand.row.longitude, row: cand.row,
+        weight: Placement.scoreBuilding(cand.row, world.roads, Date.now())
+      }));
+      const won = Placement.pick(scored);
+      const near = won ? legal.find(c => c.row.key === won.row.key) : null;
       if (!near) return;
       taken.add(near.row.key);
       Zones.updateNode(n, {
@@ -666,6 +731,7 @@ const Game = {
 
     if (this.mapless) {
       this.ensureZone();
+      this.runSpawner();
       this.checkProximity();
       this.renderListView();
       this.renderHud();
@@ -704,6 +770,7 @@ const Game = {
     this.trail.setLatLngs(this.trailPts);
 
     this.ensureZone();
+    this.runSpawner();
     this.checkProximity();
     this.renderHud();
     this.refreshDevReadout();
@@ -746,6 +813,7 @@ const Game = {
       const door = L.marker([d.latitude, d.longitude], {
         icon: L.divIcon({ className: "pinWrap",
           html: '<div class="dungeonPin' + (inside ? " inside" : "") + (sealed ? " sealed" : "") +
+                (d.origin === "auto" ? " spawned" : "") +
                 '" data-dungeon="' + d.dungeonId + '">' + (sealed ? "🔒" : kind.icon) +
                 '<span class="fl">' + (d.floors || []).length + "</span></div>",
           iconSize: [40, 40], iconAnchor: [20, 20] })
@@ -831,6 +899,7 @@ const Game = {
       const door = L.marker([d.latitude, d.longitude], {
         icon: L.divIcon({ className: "pinWrap",
           html: '<div class="instDoor' + (inside ? " inside" : "") + (sealed ? " sealed" : "") +
+                (d.origin === "auto" ? " spawned" : "") +
                 '" data-inst="' + d.instanceId + '">' + (sealed ? "🔒" : kind.icon) +
                 '<span class="lv">' + (d.levels || []).length + "</span></div>",
           iconSize: [40, 40], iconAnchor: [20, 20] })

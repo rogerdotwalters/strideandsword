@@ -212,7 +212,9 @@ const Md = {
           const size = d.shape === "rect" ? d.width + " × " + d.height + " m" : "r " + d.radius + " m";
           return '<tr data-id="' + d.dungeonId + '"' +
             (this.selected === d.dungeonId ? ' class="sel"' : "") + ">" +
-            '<td data-l="Name"><b>' + esc(d.name || "(unnamed)") + "</b></td>" +
+            '<td data-l="Name"><b>' + esc(d.name || "(unnamed)") + "</b>" +
+              (d.origin === "auto" ? ' <span class="autoTag" title="Placed by the spawner; it will be cleared when it expires">auto</span>' : "") +
+              "</td>" +
             '<td data-l="Kind">' + k.icon + " " + esc(k.label) + "</td>" +
             '<td data-l="Floors">' + (d.floors || []).length + "</td>" +
             '<td data-l="Walk">' + fmtDist(Content.dungeonLength(d)) + "</td>" +

@@ -44,5 +44,6 @@
 })();
 
 /* Expose a few internals for console poking / test harnesses. */
-window.SS = { Store, API, Auth, Game, Combat, Dungeon, Instance, Loc, Walk, Zones, Characters, Calc, Items,
-              Bestiary, Screens, Atlas, OSM, Content, DB, settings, saveSettings, K };
+window.SS = { Store, API, Local, Auth, Game, Combat, Dungeon, Instance, Loc, Walk, Zones, Characters,
+              Calc, Items, Bestiary, Screens, Atlas, OSM, Content, DB, Art, Placement, Spawner,
+              settings, saveSettings, K };

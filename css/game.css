@@ -603,7 +603,18 @@ body.inInstance .zoomModes{display:none}
 #devPanel .dh{display:flex;align-items:center;gap:6px;padding:9px 11px;border-bottom:1px solid var(--line)}
 #devPanel .dh b{flex:1;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--warn)}
 #devPanel .dh b{text-align:center}
-#devPanel .db{padding:9px}
+/* The panel has grown a section at a time and will keep doing so, so its body
+   scrolls rather than running off the bottom of a phone. The cap leaves room
+   for the top bar above it and the walk stats below. */
+#devPanel .db{padding:9px;max-height:calc(100vh - 220px);overflow-y:auto}
+/* Section headings inside the panel: quiet dividers, not shouting. */
+#devPanel .sect{
+  margin:11px 0 5px;padding-top:8px;border-top:1px solid var(--line);
+  font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--ink-3);
+}
+#devPanel .db > .sect:first-child{margin-top:2px;padding-top:0;border-top:0}
+#devPanel select.input{width:100%;margin-bottom:5px}
 #devPanel .row{display:flex;gap:5px;margin-bottom:6px}
 #devPanel .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 #devPanel .grid2 .btn{padding:6px 4px;font-size:11.5px}
@@ -633,3 +644,11 @@ input[type=range]{accent-color:var(--gold);height:22px}
 /* Location art — a PNG lying on the map under its pin. `rotate` is set on the
    element itself, never `transform`, because Leaflet owns that one. */
 .locArt{image-rendering:auto;pointer-events:none}
+
+/* A spawned dungeon or instance — one the spawner put there rather than one
+   you placed. Marked so the map tells you at a glance which is which; it is
+   otherwise an ordinary pin and behaves like one. */
+.dungeonPin.spawned, .instDoor.spawned{
+  border-style:dashed;
+  box-shadow:0 0 0 3px rgba(224,163,62,.10),0 3px 12px rgba(0,0,0,.6);
+}

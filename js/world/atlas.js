@@ -1,10 +1,16 @@
 /* -------------------------------------------------------------------------
    8b. The Atlas — a JSON name database for the real world around you
 
-   Two tables, both keyed by coordinate:
+   Three tables, all keyed by coordinate:
 
      atlas_buildings  "41.88270,-87.62330" -> { key, name, kind, ... }
      atlas_streets    "41.88301,-87.62410" -> { key, name, realName, ... }
+     atlas_places     "41.88412,-87.62190" -> { key, name, category, ring, ... }
+
+   A *place* is the third thing, and it exists because a park carries no
+   building tag: it is somewhere public that a dungeon or an instance can be
+   attached to, categorised coarsely (park / food / civic / transit / other)
+   so the spawn weights have something to address.
 
    Buildings are keyed by their footprint centroid, streets by the midpoint of
    the OSM way that carries them. Names are generated from a seed derived from
@@ -19,6 +25,7 @@
 const Atlas = (function () {
   const KEY_B = "atlas_buildings";
   const KEY_S = "atlas_streets";
+  const KEY_P = "atlas_places";
 
   /* ---- word banks ---- */
   const ST_FIRST = ["Ash","Copper","Grim","Long","Old","Silver","Thorn","Ember","Hollow","Raven",
@@ -69,11 +76,13 @@ const Atlas = (function () {
     sports_centre: "bathhouse", swimming_pool: "bathhouse", stadium: "bathhouse"
   };
 
+  const TABLE_KEYS = { buildings: KEY_B, streets: KEY_S, places: KEY_P };
+
   function table(which) {
-    return Store.get(which === "buildings" ? KEY_B : KEY_S, {}) || {};
+    return Store.get(TABLE_KEYS[which] || KEY_B, {}) || {};
   }
   function writeTable(which, obj) {
-    Store.set(which === "buildings" ? KEY_B : KEY_S, obj);
+    Store.set(TABLE_KEYS[which] || KEY_B, obj);
   }
 
   /** Coordinate key. 5 decimal places ~= 1.1 m, which is finer than any GPS fix. */
@@ -135,6 +144,50 @@ const Atlas = (function () {
   }
   function pickFrom(r, arr) { return arr[Math.floor(r() * arr.length)]; }
 
+  /* ---- naming a place ---- */
+  const P_GREEN = ["Green","Grove","Commons","Meadow","Glade","Orchard","Yard","Ring","Lawn","Copse"];
+  const P_GREEN_ADJ = ["Whispering","Sunken","Kingsfoot","Elder","Bramble","Quiet","Wind-bent",
+                       "Hollow","Faded","Thistle","Morning","Lantern"];
+  const P_TRADE = ["Provisioner","Victualler","Granary","Larder","Stores","Pantry","Dry Goods",
+                   "Salt House","Cellars"];
+  const P_CIVIC = ["Hall","Rolls","Archive","Chapter House","Assembly","Rest","Sanctum","Court"];
+  const P_TRANSIT = ["Waystation","Coachyard","Staging Post","Halt","Landing"];
+
+  /**
+   * A fantasy name for a place. Seeded on the key like a building, so the same
+   * park is the same park forever. A real name, where OSM has one, seeds
+   * instead — every entrance to one park then reads as the same place.
+   */
+  function namePlace(seed, category) {
+    const r = seededRandom("place:" + seed);
+    if (category === "park") {
+      return "The " + pickFrom(r, P_GREEN_ADJ) + " " + pickFrom(r, P_GREEN);
+    }
+    if (category === "food") {
+      return r() < 0.5
+        ? B_PERSON[Math.floor(r() * B_PERSON.length)] + "'s " + pickFrom(r, P_TRADE)
+        : "The " + pickFrom(r, B_ADJ) + " " + pickFrom(r, P_TRADE);
+    }
+    if (category === "civic")   return "The " + pickFrom(r, B_ADJ) + " " + pickFrom(r, P_CIVIC);
+    if (category === "transit") return "The " + pickFrom(r, B_ADJ) + " " + pickFrom(r, P_TRANSIT);
+    return "The " + pickFrom(r, B_ADJ) + " " + pickFrom(r, B_NOUN);
+  }
+
+  /**
+   * Polygon rings go into storage, so they get thinned first. Thirty-two
+   * points describe any park well enough for a point-in-polygon test, and the
+   * whole Atlas has to fit in a few megabytes alongside everything else.
+   */
+  const RING_MAX = 32;
+  function thinRing(ring) {
+    if (!ring || ring.length <= RING_MAX) return ring || null;
+    const step = ring.length / RING_MAX;
+    const out = [];
+    for (let i = 0; i < RING_MAX; i++) out.push(ring[Math.floor(i * step)]);
+    out.push(ring[ring.length - 1]);
+    return out;
+  }
+
   return {
     KINDS,
     keyFor,
@@ -185,6 +238,63 @@ const Atlas = (function () {
       return row;
     },
 
+    /**
+     * Look a place up, creating and persisting it the first time it is seen.
+     * `meta.ring` is the polygon for an area; a POI mapped as a single node
+     * has none, and is treated as a point with a nominal radius instead.
+     */
+    place(lat, lng, meta) {
+      const t = table("places");
+      const key = freeKey(t, lat, lng, meta && meta.osmId);
+      if (t[key]) return t[key];
+      const tags = (meta && meta.tags) || {};
+      const { category, osmKind } = Content.placeCategory(tags);
+      const realName = tags.name || null;
+      const seed = realName ? "name:" + realName.toLowerCase() + ":" + category : key;
+      const def = Content.PLACE_CATEGORIES[category] || Content.PLACE_CATEGORIES.other;
+      const row = {
+        key, coordKey: keyFor(lat, lng), latitude: +lat, longitude: +lng,
+        name: namePlace(seed, category),
+        category, categoryLabel: def.label, icon: def.icon,
+        osmKind, realName,
+        ring: thinRing(meta && meta.ring),
+        area: Math.round((meta && meta.area) || 0),
+        osmId: (meta && meta.osmId) || null,
+        source: (meta && meta.source) || "osm",
+        createdAt: nowTs()
+      };
+      t[key] = row;
+      writeTable("places", t);
+      return row;
+    },
+
+    /** Recorded places within `maxM` metres of a point, nearest first. */
+    nearPlaces(lat, lng, maxM) {
+      const t = table("places");
+      const out = [];
+      for (const k in t) {
+        const d = haversine(lat, lng, t[k].latitude, t[k].longitude);
+        if (d <= (maxM || 400)) out.push({ row: t[k], d });
+      }
+      return out.sort((a, b) => a.d - b.d);
+    },
+
+    /**
+     * Which place is this point standing in or beside? A ring is tested
+     * properly with point-in-polygon; a node POI falls back to a radius.
+     */
+    placeAt(lat, lng, nearM) {
+      const t = table("places");
+      let best = null;
+      for (const k in t) {
+        const row = t[k];
+        if (row.ring && Content.pointInRing(row.ring, lat, lng)) return row;
+        const d = haversine(lat, lng, row.latitude, row.longitude);
+        if (d <= (nearM || 30) && (!best || d < best.d)) best = { row, d };
+      }
+      return best ? best.row : null;
+    },
+
     /** Recorded buildings within `maxM` metres, nearest first. */
     nearBuildings(lat, lng, maxM, excludeKeys) {
       const t = table("buildings");
@@ -203,11 +313,14 @@ const Atlas = (function () {
     },
 
     stats() {
-      const b = table("buildings"), s = table("streets");
+      const b = table("buildings"), s = table("streets"), p = table("places");
       const named = {};
       for (const k in s) named[s[k].name] = 1;
+      const byCat = {};
+      for (const k in p) byCat[p[k].category] = (byCat[p[k].category] || 0) + 1;
       return { buildings: Object.keys(b).length, streetRows: Object.keys(s).length,
-               streetNames: Object.keys(named).length };
+               streetNames: Object.keys(named).length,
+               places: Object.keys(p).length, placesByCategory: byCat };
     },
 
     /** The whole database, shaped the way a server would return it. */
@@ -217,7 +330,8 @@ const Atlas = (function () {
         version: 1,
         exportedAt: new Date().toISOString(),
         keying: "decimal degrees, 5dp, \"lat,lng\"",
-        tables: { buildings: table("buildings"), streets: table("streets") }
+        tables: { buildings: table("buildings"), streets: table("streets"),
+                  places: table("places") }
       };
     },
 
@@ -225,12 +339,15 @@ const Atlas = (function () {
       if (!json || !json.tables) return { success: false, message: "Not an atlas file." };
       const b = Object.assign(table("buildings"), json.tables.buildings || {});
       const s = Object.assign(table("streets"), json.tables.streets || {});
+      const p = Object.assign(table("places"), json.tables.places || {});
       writeTable("buildings", b);
       writeTable("streets", s);
-      return { success: true, buildings: Object.keys(b).length, streets: Object.keys(s).length };
+      writeTable("places", p);
+      return { success: true, buildings: Object.keys(b).length,
+               streets: Object.keys(s).length, places: Object.keys(p).length };
     },
 
-    clear() { Store.remove(KEY_B); Store.remove(KEY_S); }
+    clear() { Store.remove(KEY_B); Store.remove(KEY_S); Store.remove(KEY_P); }
   };
 })();
 
@@ -249,15 +366,37 @@ const OSM = {
   ],
   MAX_BUILDINGS: 700,
   MAX_ROADS: 700,
+  MAX_PLACES: 300,
+
+  /* What counts as a public place worth attaching a dungeon to. Kept in step
+     with Content.PLACE_TAGS — that decides the category, this decides what is
+     even fetched. Narrow on purpose: every extra tag is more response to pull
+     down and more of the 2 MB cache to fill. */
+  PLACE_LEISURE: "park|garden|pitch|playground|recreation_ground|common|dog_park|" +
+                 "nature_reserve|sports_centre|fitness_centre",
+  PLACE_LANDUSE: "recreation_ground|village_green|forest|meadow",
+  PLACE_SHOP:    "supermarket|convenience|greengrocer|bakery|butcher|deli|farm|" +
+                 "department_store|mall",
+  PLACE_AMENITY: "restaurant|cafe|fast_food|food_court|pub|bar|marketplace|library|" +
+                 "townhall|community_centre|school|university|college|place_of_worship|" +
+                 "theatre|cinema|arts_centre|hospital|parking|bus_station",
   ROAD_TYPES: "motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|" +
               "service|pedestrian|footway|path|steps|cycleway|track",
 
   cacheKey(zone) { return "osm_cache_" + zone.zoneId; },
 
   query(lat, lng, radius) {
+    const at = "(around:" + radius + "," + lat + "," + lng + ");";
+    // `nw` rather than `nwr`: relations give multipolygons, and a park with a
+    // hole in it is not worth the geometry code. A relation-mapped park is
+    // usually also tagged on its outer way, so little is lost.
     return "[out:json][timeout:30];(" +
-      'way["building"](around:' + radius + "," + lat + "," + lng + ");" +
-      'way["highway"~"^(' + this.ROAD_TYPES + ')$"](around:' + radius + "," + lat + "," + lng + ");" +
+      'way["building"]' + at +
+      'way["highway"~"^(' + this.ROAD_TYPES + ')$"]' + at +
+      'nw["leisure"~"^(' + this.PLACE_LEISURE + ')$"]' + at +
+      'nw["landuse"~"^(' + this.PLACE_LANDUSE + ')$"]' + at +
+      'nw["shop"~"^(' + this.PLACE_SHOP + ')$"]' + at +
+      'nw["amenity"~"^(' + this.PLACE_AMENITY + ')$"]' + at +
       ");out geom;";
   },
 
@@ -309,12 +448,43 @@ const OSM = {
     return { success: false, message: "No Overpass endpoint answered." };
   },
 
-  /** Turn raw Overpass elements into Atlas-registered features. */
+  /**
+   * Turn raw Overpass elements into Atlas-registered features.
+   *
+   * Order matters. A supermarket is usually tagged on its own building way, so
+   * it is both a building and a place — it should be registered as both, which
+   * is why places are tested before the building/road chain rather than inside
+   * it. A node POI has no geometry at all and is handled first.
+   */
   digest(elements) {
-    const buildings = [], roads = [];
+    const buildings = [], roads = [], places = [];
+
+    const addPlace = (lat, lng, tags, el, ring, area) => {
+      if (places.length >= this.MAX_PLACES) return;
+      if (!Content.isPlaceTagged(tags)) return;
+      const row = Atlas.place(lat, lng, {
+        tags, ring, area, osmId: (el.type || "way") + "/" + el.id
+      });
+      places.push({ row, ring: ring || null, area: area || 0 });
+    };
+
     for (const el of elements) {
-      if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
       const tags = el.tags || {};
+
+      // A POI mapped as a single point: a cafe inside a building, say.
+      if (el.type === "node" && isFinite(el.lat) && isFinite(el.lon)) {
+        addPlace(el.lat, el.lon, tags, el, null, 0);
+        continue;
+      }
+      if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
+
+      // Areas: a park, or a shop that is also its own building.
+      if (Content.isPlaceTagged(tags)) {
+        const ring = el.geometry.map(p => [p.lat, p.lon]);
+        const c = this.centroid(el.geometry);
+        addPlace(c.lat, c.lng, tags, el, ring, this.polygonArea(el.geometry));
+      }
+
       if (tags.building && buildings.length < this.MAX_BUILDINGS) {
         const area = this.polygonArea(el.geometry);
         if (area < 12) continue;                 // sheds, bins, map noise
@@ -329,7 +499,7 @@ const OSM = {
         roads.push({ row, line: el.geometry.map(p => [p.lat, p.lon]), highway: tags.highway });
       }
     }
-    return { buildings, roads };
+    return { buildings, roads, places };
   },
 
   /* Road weights by class — motorways read as great roads, paths as tracks. */

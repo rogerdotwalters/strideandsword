@@ -23,7 +23,10 @@ const DB = {
     locations: "locations.json",
     dungeons:  "dungeons.json",
     instances: "instances.json",
-    players:   "players.json"
+    players:   "players.json",
+    /* Not a content table — the spawn weights, read straight off DB.raw by
+       Placement. Loaded here so it arrives with everything else. */
+    spawnRules: "spawn-rules.json"
   },
 
   raw: {},              // what the files actually held, after load

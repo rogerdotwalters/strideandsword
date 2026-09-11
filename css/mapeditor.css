@@ -342,3 +342,13 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
 .artPrev img{max-width:100%;max-height:100%;display:block}
 .artFields{flex:1 1 auto;min-width:0}
 .artBtns{display:flex;gap:6px;margin:4px 0 2px}
+
+/* A row the spawner placed rather than a person. It is editable like any
+   other, but it will be swept away when it expires — worth knowing before
+   you spend time on it. */
+.autoTag{
+  display:inline-block;margin-left:6px;padding:1px 6px;border-radius:99px;
+  font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  background:rgba(224,163,62,.16);color:var(--gold,#e0a33e);
+  border:1px solid rgba(224,163,62,.35);vertical-align:middle;
+}

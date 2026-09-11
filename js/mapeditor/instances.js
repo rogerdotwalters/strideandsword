@@ -122,7 +122,9 @@ const Mi = {
           const k = Content.instanceKind(d.kind);
           return '<tr data-id="' + d.instanceId + '"' +
             (this.selected === d.instanceId ? ' class="on"' : "") + ">" +
-            '<td data-l="Name"><b>' + esc(d.name || "(unnamed)") + "</b></td>" +
+            '<td data-l="Name"><b>' + esc(d.name || "(unnamed)") + "</b>" +
+              (d.origin === "auto" ? ' <span class="autoTag" title="Placed by the spawner; it will be cleared when it expires">auto</span>' : "") +
+              "</td>" +
             '<td data-l="Kind">' + k.icon + " " + esc(k.label) + "</td>" +
             '<td data-l="Levels">' + (d.levels || []).length + "</td>" +
             '<td data-l="Floor">' + Math.round(val(d, "size")) + " m²</td>" +

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Test tooling for Stride & Sword. Deliberately NOT at the repo root - Cloudflare Pages auto-installs dependencies when it finds a root package.json, and this project has no build step.",
   "scripts": {
-    "test": "node smoke.js && node permissions.js && node editor.js && node mapeditor.js && node dungeons.js && node instances.js && node responsive.js",
+    "test": "node smoke.js && node permissions.js && node editor.js && node mapeditor.js && node dungeons.js && node instances.js && node spawning.js && node responsive.js",
     "test:game": "node smoke.js",
     "test:permissions": "node permissions.js",
     "balance": "node balance.js",
@@ -16,7 +16,8 @@
     "test:responsive": "node responsive.js",
     "test:dungeons": "node dungeons.js",
     "test:instances": "node instances.js",
-    "verify": "node verify.js"
+    "verify": "node verify.js",
+    "test:spawning": "node spawning.js"
   },
   "devDependencies": {
     "leaflet": "^1.9.4",
