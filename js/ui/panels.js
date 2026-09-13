@@ -223,8 +223,9 @@ const Panels = {
     const mk = (label, cls, fn) => { const b = el("button", "btn block " + cls, label); b.onclick = fn; actions.appendChild(b); };
     mk("Resurvey the streets", "ghost", () => {
       m.close();
-      Store.remove(OSM.cacheKey(Game.zone));
+      // Every chunk, not one zone — the world is a grid now.
       Game.loadWorld(true);
+      UI.toast("Resurveying, one chunk at a time…", "info", 3000);
     });
     mk("Export atlas as JSON", "ghost", () => {
       const data = Atlas.export();
@@ -260,9 +261,17 @@ const Panels = {
       UI.confirm("Regenerate every name?", "Buildings and roads get fresh fantasy names. Site names update too.", () => {
         Atlas.clear();
         if (Game.world) {
-          const els = Store.get(OSM.cacheKey(Game.zone), null);
+          /* Re-digest from the cached geometry rather than re-surveying: new
+             names are a local decision and must not cost anybody a query. The
+             cache is per chunk now, so every loaded cell is re-read. */
           Game.nodes.forEach(n => { delete n.anchorKey; });
-          if (els) { const w = OSM.digest(els); Game.world = w; Game.renderWorld(w); Game.snapNodesToBuildings(w); }
+          Chunks.loaded = {};
+          Object.keys(Chunks.all()).forEach(k => {
+            const els = Store.get(Chunks.cacheKeyFor(k), null);
+            if (els) Chunks.loaded[k] = OSM.digest(els);
+          });
+          const w = Chunks.mergedWorld();
+          Game.world = w; Game.renderWorld(w); Game.snapNodesToBuildings(w);
         }
         UI.toast("The town has forgotten its old names.", "good", 3200);
       });
@@ -286,9 +295,14 @@ const Panels = {
     mk("Sign out", "ghost", () => Auth.logout());
     mk("Wipe all local data", "danger", () => {
       UI.confirm("Wipe everything?", "Accounts, characters, zones and progress in this browser are deleted.", () => {
+        // Every cached survey, however it was keyed — chunk caches now, and
+        // the old per-zone ones from before the world became a grid.
+        Object.keys(Chunks.all()).forEach(k => Store.remove(Chunks.cacheKeyFor(k)));
         Object.values(Store.get(K.zones, {}) || {}).forEach(z => Store.remove(OSM.cacheKey(z)));
         [K.session, K.accounts, K.characters, K.zones, K.nodes, K.inventories, K.encounters,
-         K.walk, K.settings, "atlas_buildings", "atlas_streets"].forEach(k => Store.remove(k));
+         K.walk, K.settings, "atlas_buildings", "atlas_streets", "atlas_places",
+         "chunk_state", "spawn_state", "spawn_state_regions",
+         OSM.COOL_KEY].forEach(k => Store.remove(k));
         location.reload();
       });
     });
@@ -310,7 +324,7 @@ const Panels = {
         if (Game.worldLayer) Game.worldLayer.clearLayers();
         Game.applyZoomDetail();
       } else if (Game.world) { Game.renderWorld(Game.world); }
-      else { Game._worldZone = null; Game.loadWorld(); }
+      else { Game.syncChunks({ force: true }); }
     };
     $("#setTile", body).oninput = (e) => {
       $("#tileVal", body).textContent = e.target.value;

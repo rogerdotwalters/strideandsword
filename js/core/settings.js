@@ -5,8 +5,23 @@ const DEFAULT_SETTINGS = {
   locationMode: "gps",       // "gps" = your real position | "sim" = dev testing
   gpsUpdateInterval: 6000,   // ms between accepted position updates
   interactRange: 35,         // metres to trigger a node
-  zoneRadius: 320,           // metres — how far nodes spread from the office
-  nodeCount: 11,
+  zoneRadius: 320,           // metres — a hand-made zone's reach
+  nodeCount: 11,             // sites in a hand-made zone
+
+  /* The chunked world. A chunk is 500 m of ground; you generate the ones near
+     you and see the things inside your sight radius. */
+  sightRadiusM: 300,         // beyond this a site is a "?" on the map
+  /* Which chunks get surveyed. From a cell's centre its own edges are 251 m
+     away, so 350 m reaches the four neighbours you can see into without
+     pulling in the diagonals as well — five Overpass queries on a cold start
+     rather than nine. Standing near a corner it picks up the cells that
+     actually meet there, because the test is distance-to-edge. */
+  chunkLoadRadiusM: 350,
+  locationsPerChunk: 8,      // ~the old density, for a 500 m cell
+  chunkNodeTtlMinutes: 60,   // how long a generated site lives
+  maxProceduralNodes: 300,   // hard cap, oldest evicted first
+  chunkCacheBudgetBytes: 1800000,  // total raw geometry kept in storage
+  chunkCacheMaxBytes: 800000,      // a single chunk bigger than this is not cached
   mapZoom: 19.5,             // the live zoom — remembered between sessions
   zoomMode: "walk",          // which preset the zoom buttons show as selected
   zoomStreet: 16,            // "driving" preset — the whole zone and its roads

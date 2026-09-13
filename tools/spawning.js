@@ -445,59 +445,134 @@ async function newPage(browser) {
   });
 
   /* ============================================================ INSTANCES */
-  console.log('\n===== THE INSTANCE DAY =====');
+  /* Instances left the daily allowance behind when they moved onto the 2 km
+     region grid: a region rolls one or two, they live for days, and the 500 m
+     chunks underneath only ever draw them. So the questions worth asking are
+     about the region, not about the day. */
+  console.log('\n===== THE INSTANCE REGION =====');
 
-  await step('one or two a day, and a reload does not reroll it', async () => {
+  await step('a region rolls one or two, then leaves them alone', async () => {
     const r = await page.evaluate((now) => {
-      const zone = SS.Game.zone;
+      const here = SS.Loc.last;
       SS.Content.replaceAll('instances', []);
-      SS.Spawner.reset(zone);
-      SS.Spawner.tick(zone, { now });
-      const first = SS.Spawner.state(zone.zoneId).target;
-      // Tick many more times across the same day: the target must not move.
-      for (let h = 0; h < 14; h++) SS.Spawner.tick(zone, { now: now + h * 3600000 });
-      const still = SS.Spawner.state(zone.zoneId).target;
-      const lo = SS.Placement.rulesFor('instances').perDayMin;
-      const hi = SS.Placement.rulesFor('instances').perDayMax;
-      return { first, still, lo, hi, spawned: SS.Spawner.state(zone.zoneId).spawned };
+      SS.Spawner.reset(SS.Game.zone);
+      SS.Spawner.tickAt(here.latitude, here.longitude, { now, at: here });
+      const first = SS.Content.list('instances').filter(x => x.origin === 'auto');
+      const region = SS.Grid.regionAt(here.latitude, here.longitude);
+      const rolledAt = SS.Spawner.regionState(region.key).rolled;
+      // Six more hours of looking. Nothing should be added or replaced: the
+      // region's answer is settled until its instances run out of days.
+      for (let h = 1; h <= 6; h++)
+        SS.Spawner.tickAt(here.latitude, here.longitude, { now: now + h * 3600000, at: here });
+      const later = SS.Content.list('instances').filter(x => x.origin === 'auto');
+      const rules = SS.Placement.rulesFor('instances');
+      return {
+        n: first.length, lo: rules.perRegionMin, hi: rules.perRegionMax,
+        after: later.length,
+        sameIds: later.every(x => first.some(f => f.instanceId === x.instanceId)),
+        region: region.key, rolledStable: SS.Spawner.regionState(region.key).rolled === rolledAt,
+        allInRegion: first.every(x => x.regionKey === region.key)
+      };
     }, at(7, 0));
-    if (!(r.first >= r.lo && r.first <= r.hi)) throw new Error('target ' + r.first + ' outside ' + r.lo + '-' + r.hi);
-    if (r.still !== r.first) throw new Error('the day rerolled: ' + r.first + ' -> ' + r.still);
-    if (r.spawned > r.first) throw new Error('spawned ' + r.spawned + ' against a target of ' + r.first);
-    return 'target ' + r.first + ' (' + r.lo + '-' + r.hi + '), held across 14 ticks, ' +
-           r.spawned + ' placed';
+    if (!(r.n >= r.lo && r.n <= r.hi)) throw new Error('rolled ' + r.n + ', outside ' + r.lo + '-' + r.hi);
+    if (r.after !== r.n || !r.sameIds) throw new Error('six hours later it had ' + r.after + ' (same ids: ' + r.sameIds + ')');
+    if (!r.rolledStable) throw new Error('the region rerolled while nothing had expired');
+    if (!r.allInRegion) throw new Error('an instance was not stamped with its region');
+    return r.n + ' in region ' + r.region + ' (' + r.lo + '-' + r.hi + '), unchanged over six hours';
   });
 
-  await step('the allowance is not spent at 3am', async () => {
-    const r = await page.evaluate((night) => {
-      const zone = SS.Game.zone;
-      SS.Content.replaceAll('instances', []);
-      SS.Spawner.reset(zone);
-      for (let i = 0; i < 5; i++) SS.Spawner.tick(zone, { now: night + i * 60000 });
-      const atNight = SS.Content.list('instances').length;
-      // Now move to a lunchtime on the same day.
-      const lunch = night + 9 * 3600000;
-      SS.Spawner.tick(zone, { now: lunch });
-      return { atNight, atLunch: SS.Content.list('instances').length };
-    }, at(3, 0));
-    if (r.atNight) throw new Error('spawned ' + r.atNight + ' instances at 3am');
-    if (!r.atLunch) throw new Error('nothing arrived at lunch either');
-    return 'nothing at 3am, ' + r.atLunch + ' at noon';
+  await step('each one lives days, not hours', async () => {
+    const r = await page.evaluate((now) => {
+      const rows = SS.Content.list('instances').filter(x => x.origin === 'auto');
+      const days = rows.map(x => (x.expiresAt - now) / 86400000);
+      const rules = SS.Placement.rulesFor('instances');
+      return {
+        days: days.map(d => Math.round(d * 100) / 100),
+        lo: rules.lifetimeDaysMin, hi: rules.lifetimeDaysMax,
+        cats: rows.map(x => x.placeCategory)
+      };
+    }, at(7, 0));
+    if (!r.days.length) throw new Error('nothing alive to measure');
+    // The category multiplier stretches the window at both ends (0.7 to 1.2),
+    // so the bound to assert is the rule times the extremes, not the rule.
+    const floor = r.lo * 0.7, ceil = r.hi * 1.2;
+    const bad = r.days.find(d => d < floor - 0.01 || d > ceil + 0.01);
+    if (bad !== undefined) throw new Error(bad + ' days, outside ' + floor + '-' + ceil);
+    return r.days.map((d, i) => d + 'd at a ' + r.cats[i]).join(', ') +
+           ' (rule ' + r.lo + '-' + r.hi + ' days)';
   });
 
-  await step('a new day rolls a fresh allowance', async () => {
-    const r = await page.evaluate((noon) => {
-      const zone = SS.Game.zone;
-      const dayOne = SS.Spawner.state(zone.zoneId).day;
-      const tomorrow = noon + 24 * 3600000;
+  await step('when its days are up the region rolls again', async () => {
+    const r = await page.evaluate((now) => {
+      const here = SS.Loc.last;
+      const before = SS.Content.list('instances').filter(x => x.origin === 'auto');
+      const last = Math.max.apply(null, before.map(x => x.expiresAt));
+      const after = last + 60000;
+      SS.Spawner.tickAt(here.latitude, here.longitude, { now: after, at: here });
+      const now2 = SS.Content.list('instances').filter(x => x.origin === 'auto');
+      return {
+        beforeIds: before.map(x => x.instanceId),
+        afterIds: now2.map(x => x.instanceId),
+        daysLater: Math.round((after - now) / 86400000 * 10) / 10
+      };
+    }, at(7, 0));
+    if (!r.afterIds.length) throw new Error('the region emptied and never refilled');
+    const kept = r.afterIds.filter(id => r.beforeIds.indexOf(id) >= 0);
+    if (kept.length) throw new Error(kept.length + ' expired instance(s) survived the sweep');
+    return r.beforeIds.length + ' expired after ' + r.daysLater + ' days, ' +
+           r.afterIds.length + ' fresh in their place';
+  });
+
+  // Note what this does NOT measure: the mock's parks sit inside the 250 m the
+  // rules keep clear around the player, so what is left to choose between here
+  // is trails and car parks. That is still the weighting doing the work — a 10
+  // against a 1, which at contrast 0.55 should land near 78/22.
+  await step('the favoured categories win the region far more often than the dull ones', async () => {
+    const r = await page.evaluate((now) => {
+      const here = SS.Loc.last;
+      const tally = {};
+      // Roll the same region many times from scratch. Only the dice change.
+      for (let i = 0; i < 80; i++) {
+        SS.Content.replaceAll('instances', []);
+        SS.Store.remove(SS.Spawner.KEY + '_regions');
+        SS.Spawner.tickAt(here.latitude, here.longitude, { now, at: here });
+        SS.Content.list('instances').filter(x => x.origin === 'auto')
+          .forEach(x => { tally[x.placeCategory] = (tally[x.placeCategory] || 0) + 1; });
+      }
+      const total = Object.values(tally).reduce((a, b) => a + b, 0);
+      return { tally, total };
+    }, at(7, 30));
+    const green = (r.tally.park || 0) + (r.tally.trail || 0);
+    const dull = (r.tally.other || 0) + (r.tally.transit || 0);
+    if (!r.total) throw new Error('nothing spawned across 80 rolls');
+    if (green <= dull) throw new Error('parks+trails ' + green + ' vs other+transit ' + dull);
+    if (!dull) throw new Error('the dull places were shut out entirely — nothing may be zero');
+    return Object.entries(r.tally).map(([k, v]) => k + ' ' + Math.round(v / r.total * 100) + '%').join(', ') +
+           ' over ' + r.total + ' rolls';
+  });
+
+  await step('an instance does not open at your feet', async () => {
+    const r = await page.evaluate((now) => {
+      const here = SS.Loc.last;
+      const H = (a, b, c, d) => {
+        const R = 6371000, tr = x => x * Math.PI / 180;
+        const dLat = tr(c - a), dLon = tr(d - b);
+        const s = Math.sin(dLat / 2) ** 2 + Math.cos(tr(a)) * Math.cos(tr(c)) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(s));
+      };
       SS.Content.replaceAll('instances', []);
-      SS.Spawner.tick(zone, { now: tomorrow });
-      const st = SS.Spawner.state(zone.zoneId);
-      return { dayOne, dayTwo: st.day, spawnedToday: st.spawned };
-    }, at(12, 0));
-    if (r.dayOne === r.dayTwo) throw new Error('the day never turned over: ' + r.dayOne);
-    if (r.spawnedToday > 1) throw new Error('the new day started mid-count');
-    return r.dayOne + ' -> ' + r.dayTwo;
+      SS.Store.remove(SS.Spawner.KEY + '_regions');
+      SS.Spawner.tickAt(here.latitude, here.longitude, { now, at: here });
+      const ds = SS.Content.list('instances').filter(x => x.origin === 'auto')
+        .map(x => Math.round(H(here.latitude, here.longitude, x.latitude, x.longitude)));
+      return { ds, want: SS.Placement.rulesFor('instances').minFromPlayerM };
+    }, at(7, 30));
+    if (!r.ds.length) throw new Error('nothing spawned');
+    // The rule is a preference, not a refusal — in a region with nowhere far
+    // enough it is dropped rather than leaving the region empty. What must
+    // never happen is one opening its door on the square you are standing on.
+    if (Math.min.apply(null, r.ds) < 60) throw new Error('one landed ' + Math.min.apply(null, r.ds) + ' m away');
+    return 'asked for ' + r.want + ' m, got ' + r.ds.join(' m, ') + ' m';
   });
 
   /* ============================================================= LOCATIONS */

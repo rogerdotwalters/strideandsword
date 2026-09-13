@@ -134,10 +134,18 @@ const Placement = {
    */
   candidates(zone, kind, when) {
     if (!zone) return [];
-    const out = [];
-    const reach = (+zone.radius || 320) + 60;
+    return this.candidatesAround(
+      zone.centerLatitude, zone.centerLongitude, (+zone.radius || 320) + 60, kind, when);
+  },
 
-    Atlas.nearPlaces(zone.centerLatitude, zone.centerLongitude, reach).forEach(p => {
+  /**
+   * The same, around any point and reach. Regions use this directly — they are
+   * four times the size of a chunk and own no zone row of their own.
+   */
+  candidatesAround(lat, lng, reach, kind, when) {
+    const out = [];
+
+    Atlas.nearPlaces(lat, lng, reach).forEach(p => {
       out.push({
         kind: "place", row: p.row, category: p.row.category,
         latitude: p.row.latitude, longitude: p.row.longitude,
@@ -146,9 +154,24 @@ const Placement = {
       });
     });
 
+    /* Trails, when the rules give them a weight. A trail is a line rather than
+       an area, so the candidate sits at the way's midpoint and `spotIn` nudges
+       it along from there — "something on the path", with the path itself
+       being what you walk to reach it. */
+    if ((+this.catRules(kind, "trail").weight || 0) > 0 && Atlas.nearTrails) {
+      Atlas.nearTrails(lat, lng, reach).forEach(t => {
+        out.push({
+          kind: "trail", row: t.row, category: "trail",
+          latitude: t.row.latitude, longitude: t.row.longitude,
+          ring: null,
+          weight: this.categoryWeight(kind, "trail", when)
+        });
+      });
+    }
+
     // Buildings are the floor. Without them a zone with no mapped parks or
     // shops would have nothing to offer at all.
-    Atlas.nearBuildings(zone.centerLatitude, zone.centerLongitude, reach).forEach(b => {
+    Atlas.nearBuildings(lat, lng, reach).forEach(b => {
       // A shop that is also its own building is already in the list above.
       if (out.some(c => c.row.osmId && c.row.osmId === b.row.osmId)) return;
       out.push({

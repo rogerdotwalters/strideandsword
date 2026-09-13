@@ -46,7 +46,11 @@ up.
   whole site if that matters.
 - Map tiles come from OpenStreetMap's servers and the street survey from the
   public Overpass API, both on fair-use terms. Fine for one office, not for a
-  crowd. Both send CORS headers, so no proxy is needed.
+  crowd. Both send CORS headers, so no proxy is needed. What the app does to
+  stay inside those terms — one query at a time, spaced, backed off when asked,
+  and cached hard — is under *Asking nicely* below. If this ever grows past one
+  office, the honest next step is your own Overpass instance rather than turning
+  any of that off.
 
 ---
 
@@ -103,6 +107,8 @@ failing silently — see the location gate and its **Show diagnostics** button.
         items.js      procedural item generation
         bestiary.js   turning an authored monster into an enemy
         atlas.js      the coordinate-keyed name database + Overpass client
+        grid.js       the two grids: 500 m chunks and 2 km regions
+        chunks.js     the world filling in as you walk, and what it throws away
         zones.js      zones and procedural node scatter
         location.js   geolocation, distance accumulation, proximity
         art.js        the PNGs that sit on the map
@@ -271,15 +277,113 @@ re-reads what changed — on focus, and on the browser's own storage event — s
 you no longer have to reload to see something you just placed.
 
 To get to it, turn on **Dev test** and use the dev panel's *Authored content*
-list: every location, dungeon and instance in the zone, nearest first, with
+list: every location, dungeon and instance you have authored, nearest first
+(capped at 25, because the world now generates plenty of its own), with
 **Walk to it** (a simulated walk at walking pace, so the proximity checks fire
 exactly as they would on foot), **Teleport to it**, and **Go straight in**,
 which skips the doorstep prompt. **Reload authored** forces a re-read and says
 what changed.
 
+The panel also has a **chunked world** section — load the cells around you now,
+or wipe them and watch them regenerate — and a **spawning** section with what is
+live, what is next, and buttons to force or clear a spawn rather than waiting
+hours for the schedule.
+
 One thing to know: a zone created in the map editor belongs to the *world*, not
 to a player, so every character sees it. Without that, content authored in the
-editor was invisible in the game — which is exactly the bug it fixes.
+editor was invisible in the game — which is exactly the bug it fixes. The zone
+picker lists only zones somebody made by hand; the 500 m cells the game
+generates as you walk are counted in the status bar but kept out of the list,
+which would otherwise fill with them after a single walk.
+
+## The world fills in as you walk
+
+There is no home base. The world is quantised onto two grids, and everything
+you see belongs to a cell of one of them:
+
+    local chunks   500 m   locations and dungeons, an hour or three of life
+    regions       2000 m   instances only, one to three days of life
+
+Walk into a chunk and **its whole set of locations is generated at once** —
+eight of them, placed with the same weights as everything else, then nudged
+onto real buildings once the map data for that cell arrives. Seeing them is a
+separate question: inside the **300 m sight radius** a site is itself, and
+outside it shows as a `?` you can prod for a distance but not enter. That is
+the radar.
+
+A chunk *is* a zone row — `kind: "chunk"`, a `chunkKey`, and a radius of 354 m
+so the circle covers the square — which is what lets the spawner, the placement
+scoring and the map editor carry on unchanged. A zone you made by hand still
+wins wherever you are standing inside one, so the office you set up
+deliberately is never paved over by the grid; mark it **hand-placed only** and
+nothing procedural is generated inside it at all.
+
+The grid quantises latitude uniformly (500 m is 0.004523°) and longitude per
+**latitude band**, `latStep / cos(lat)`, so cells stay about 500 m square from
+the equator to well past the Arctic Circle rather than turning into letterboxes
+away from one chosen latitude.
+
+### Three budgets, because the pieces are wildly different sizes
+
+    one location row         ~400 bytes
+    one Atlas building row    319 bytes
+    one chunk's raw geometry  370 KB – 2 MB
+
+localStorage is about 5 MB in total, so only one of those can actually fill it:
+
+- **raw geometry** — a byte budget (1.8 MB, and no single chunk over 800 KB),
+  least-recently-seen evicted first. It is the only thing big enough to matter
+  and the only thing that costs one query to get back.
+- **Atlas rows** — kept. They are small, they are what the spawner reads, and
+  dropping them would rename every street you walk back down.
+- **locations** — an hour, then a cap of 300, oldest first. Never one you are
+  standing in range of, and never one you are mid-fight with. A chunk left with
+  nothing is forgotten entirely, so walking back into it generates a fresh set
+  rather than an empty one.
+
+Surveys are done one cell at a time, and only for the cells within 350 m, which
+is five to seven of them — see *Asking nicely* below — and the map draws as soon
+as the cell underfoot lands rather than waiting for its neighbours. **If
+Overpass cannot be reached the chunk is generated anyway** and marked blind; the
+geometry snaps its sites onto real buildings later, when it arrives. The game
+has always been playable on a plain map and it stays that way.
+
+## Asking nicely
+
+Three donated services hold this game up — the Overpass API for geometry, OSM's
+tile servers for the base map, Nominatim for the map editor's search — and each
+publishes a usage policy. A game that surveys the ground as you walk is exactly
+the client those policies exist to restrain, so the restraint is written into
+the code rather than left to good intentions.
+
+**Every Overpass request goes through one gate.** One in flight at a time
+whatever the caller, 1.5 s apart, twelve a minute. A 429 or a 504 sets a
+cool-off — honouring `Retry-After` when the server lets a browser read it — and
+is deliberately **not** retried on another endpoint, because that moves the load
+onto a different volunteer rather than reducing it. The cool-off is stored, so
+reloading the page is not a way out of it.
+
+**A cell that failed is not asked again for a minute**, doubling to half an
+hour. This is the one that mattered most: with Overpass unreachable the old code
+re-asked every cell in range on every sync — around sixty requests a minute,
+indefinitely. It is three now, and then silence.
+
+**The cache is the real politeness**, so it was made to hold much more. A
+response is pruned to the ten tags anything actually reads and its coordinates
+rounded to about 10 cm before storage — 56% smaller on the test town — and kept
+for a month. Standing still costs nothing; walking back over ground you covered
+this morning costs nothing. "Resurvey the streets" only drops the cells you can
+see, and "Rename the whole town" re-digests what is already cached rather than
+asking again.
+
+**Tiles** update when the map settles rather than on every GPS nudge, keep a
+buffer so walking back asks for nothing, and stop requesting real tiles past
+zoom 19. **Nominatim** is held to one search a second with its answers
+remembered.
+
+The dev panel shows the running total, and `npm run test:chunks` ends with eight
+assertions that measure it — request overlap, the gaps between requests, which
+hosts were contacted after a 429, and what a reload does to a cool-off.
 
 ## Where things spawn, and how often
 
@@ -302,7 +406,8 @@ favoured without the corner shop feeling dead. Set it to 1 to feel the weights
 exactly as written, or 0 to make everywhere equally likely.
 
 **`outOfWindowMultiplier`** is what a category is worth outside its hours.
-0.15, not 0: a grocery store at 3am is possible, just uncommon.
+0.35, not 0: a grocery store at 3am is possible, just uncommon. Dungeons keep
+no hours at all, so theirs sits at 1.
 
 ### Categories
 
@@ -313,31 +418,47 @@ you have to look up, and the weights file addresses them by name.
 At the default weights a dungeon lands on a park about a third of the time, a
 food place a quarter, and an ordinary building about one time in ten.
 
-### Dungeons: one at a time
+### Dungeons: one per chunk
 
-One live in the zone, always. It lasts about three hours — longer at a park,
-shorter at a car park, because the lifetime is weighted too — or until you
-clear it, and then the next appears somewhere else about fifteen minutes later.
-That fifteen minutes is deliberately a gap, not an overlap: it is what gives a
-cleared dungeon a sense of ending.
+One live in each 500 m chunk you have loaded, always, so the world fills in as
+you explore rather than all at once. It lasts about three hours — longer at a
+park, shorter at a car park, because the lifetime is weighted too — or until
+you clear it, and then the next appears somewhere else in that cell about
+fifteen minutes later. That fifteen minutes is deliberately a gap, not an
+overlap: it is what gives a cleared dungeon a sense of ending.
 
-The separation rule asks for 2000 ft between dungeons. A zone is only 640 m
+A fresh spawn is also kept **120 m away from you**. A dungeon is something you
+walk to, and a cell you have just stepped into would otherwise open its door
+prompt in your face. Expired dungeons are swept wherever they are, not only in
+the cells you are standing among, so a long walk does not leave a trail of them
+in storage.
+
+The separation rule asks for 2000 ft between dungeons. A chunk is only 500 m
 across, so that is usually unsatisfiable — the rule then stops being a hard
 floor and becomes a push, picking from the furthest quarter of what is
 available. In practice: a spawn never lands on top of a dungeon you placed by
 hand, and a hand-placed dungeon never blocks the spawner, because it does not
 fill the single slot.
 
-### Instances: once or twice a day
+### Instances: one or two per region, lasting days
 
-One or two per zone per day, rolled once and stored, so a reload does not
-reroll what you are getting. They arrive inside the hours their category
-keeps — parks 06:00–09:00 and 16:00–19:00, food 11:00–14:00 and 17:00–20:00.
+Instances are **not** owned by local chunks. A 2 km region rolls one or two the
+first time you come into it, each lasting **one to three days**; a local chunk
+only ever *draws* the ones whose coordinates fall inside it, and never creates
+or destroys one. Walking through a cell reveals an instance that was already
+there. When a region's instances run out of days it rolls again.
 
-**Windows decide *when*; weights decide *where*.** A category with no hours —
-`civic`, say — can win the spot once something has opened the door, but it
-cannot open the door itself. Without that distinction the day's allowance would
-be spent at three in the morning on whatever happened to have no opening times.
+The weights favour **parks and trails** (12 and 10, against 8 for food and 0.5
+for anything else), and a trail is a genuine category rather than a building —
+`footway|path|steps|cycleway|track` already arrive in the Atlas, so an instance
+on one is placed at a point *along the way*.
+
+Because something that lives two days is alive across every window, the hours
+— parks 06:00–09:00 and 16:00–19:00, food 11:00–14:00 and 17:00–20:00 — are no
+longer a gate. They survive as a **placement preference at the moment a region
+rolls**: come into one at lunchtime and a food place is likelier, at eight in
+the morning and a park is. That keeps the intent in the only way that still
+means anything at this lifetime.
 
 ### What it spawns
 
@@ -514,7 +635,7 @@ collapse into a ⋯ sheet instead of wrapping.
     cd tools
     npm install                  # playwright + leaflet, for the tests only
     npm run serve                # http://localhost:8000
-    npm test                     # 281 assertions, ~17 minutes
+    npm test                     # 312 assertions, ~25 minutes
 
 Edit a file and reload. There is no build step and nothing to regenerate — the
 files you edit are the files that get served, which is the point of the
@@ -530,11 +651,12 @@ for you, not for them.
 |---|---|
 | `npm run test:game` | 104 assertions × 3 configurations: with the map, with Overpass unreachable, and with Leaflet itself blocked. Registration through combat, loot, levelling, the Atlas, persistence, the zoom presets and the tile fade. |
 | `npm run test:editor` | 27 assertions: CRUD round-trips, rarity scaling staying derived, loot percentages measured over 4000 rolls, drop-count clamping, referential cleanup on delete, and authored monsters actually fighting and dropping in the game. |
-| `npm run test:map` | 32 assertions: placing, dragging, resizing and deleting locations, zone management, weighted spawn distribution over 6000 draws, opening hours including a window that wraps midnight, day gating, respawn timing, a location driving a real encounter and chest, and the zoom presets following the game's settings. |
+| `npm run test:map` | 33 assertions: placing, dragging, resizing and deleting locations, zone management, weighted spawn distribution over 6000 draws, opening hours including a window that wraps midnight, day gating, respawn timing, a location driving a real encounter and chest, the zoom presets following the game's settings, and the generated chunk zones staying out of the zone picker. |
 | `npm run test:responsive` | 31 assertions: both editors driven on an emulated iPhone (390×844, touch) and at 1440×900. Pane switching, the ⋯ sheet, card-view tables, placing a location by tapping the map, no sideways overflow, and no touch target under 40 px — including the zoom presets, which must not end up buried under another control, the dungeon layer switch, placing both a location and a dungeon by tap, and a refused placement leaving the button usable. |
 | `npm run test:dungeons` | 21 assertions: drawing and resizing a footprint, floors inheriting and reordering, rectangle geometry in metres, then a whole run walked in the game — entering, a real clicked fight, a chest, stepping out and picking it back up, the stairs down, and the cooldown at the bottom. |
 | `npm run test:instances` | 24 assertions: authoring a door and its levels, drawn lines squaring onto an axis, then inside — the floor being exactly the rectangle asked for with the drawn walls solid, everything on it reachable from the door by flood fill, the dial turning without moving you, pace, walls that stop you without refunding the walk, monsters that step only when you do and close when they see you, contact fights, chests, the boss holding the stairs, the level change, and the cooldown. |
-| `npm run test:spawning` | 24 assertions: parks and shops arriving in the Atlas as a third feature class, a park as a polygon and a cafe as a point, point-in-polygon, the category distribution over 6000 rolls, the contrast dial at 0 / 0.55 / 1, many buildings failing to outvote few parks, time windows including one that wraps midnight, out-of-hours staying pickable, the three-hour expiry and fifteen-minute gap, clearing, a dungeon you are standing in surviving its own expiry, hand-placed rows untouched, and the once-or-twice-a-day roll holding across a reload. The clock is injected, so none of it waits. |
+| `npm run test:spawning` | 26 assertions: parks and shops arriving in the Atlas as a third feature class, a park as a polygon and a cafe as a point, point-in-polygon, the category distribution over 6000 rolls, the contrast dial at 0 / 0.55 / 1, many buildings failing to outvote few parks, time windows including one that wraps midnight, out-of-hours staying pickable, the three-hour dungeon expiry and fifteen-minute gap, clearing, a dungeon you are standing in surviving its own expiry, hand-placed rows untouched, and on the region side: one or two rolled and then left alone for hours, lifetimes measured in days, a region rolling again once its days are up, the favoured categories winning without shutting the dull ones out, and nothing opening at your feet. The clock is injected, so none of it waits. |
+| `npm run test:chunks` | 28 assertions: the grid measured at four latitudes, keys round-tripping, only the cells in reach loaded; a chunk generating all at once and its neighbours with it, walking into a new one without disturbing the old, and coming back on the cache; sight — what is drawn as a `?`, what resolves as you approach, and what a `?` does when prodded; the three budgets — the hour, the cap oldest-first, the byte budget, and a swept chunk regenerating when you walk back; a dungeon per chunk with one zone row apiece; a chunk drawing a region's instance without creating or destroying it; and a chunk generating anyway with Overpass down, then snapping when the geometry arrives. Then the usage policy: no two requests in flight at once from four concurrent callers, none closer than the minimum gap, a 429 costing exactly one request to one host, nothing reaching the network during a cool-off, the cool-off surviving a reload, a dead service backing off per cell, the cache pruned to what we read without changing what digests out of it, and standing still asking for nothing. |
 | `npm run test:permissions` | 18 assertions across four origins: no permission on `file://`, declining the gate, `http://localhost`, a LAN address, already granted. |
 | `npm run balance` | Simulates 400 fights per class/level/difficulty cell and prints win rates. Run it after touching any combat number. |
 | `npm run shots` | Screenshots into `tools/screenshots/` using the real Leaflet from `node_modules`. |

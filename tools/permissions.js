@@ -162,13 +162,24 @@ async function toGame(page, url) {
       return 'watch replaced cleanly (' + r.before + ' → ' + r.after + ')';
     });
 
-    await step('zone anchors on the real fix', async () => {
+    await step('the world anchors on the real fix', async () => {
       await page.waitForTimeout(1500);
+      // Not "the zone centre is the fix" any more: a zone is a 500 m grid cell,
+      // so its centre is a grid line. What the fix decides is WHICH cell you are
+      // in, and that every site you can see belongs to a cell around you.
       const r = await page.evaluate(() => SS.Game.zone && {
-        lat: SS.Game.zone.centerLatitude.toFixed(4), n: SS.Game.nodes.length });
+        lat: SS.Loc.last.latitude.toFixed(4),
+        inCell: SS.Grid.contains(SS.Grid.chunkAt(SS.Loc.last.latitude, SS.Loc.last.longitude),
+                                 SS.Loc.last.latitude, SS.Loc.last.longitude),
+        onCell: SS.Game.zone.kind !== 'chunk' ||
+                SS.Game.zone.chunkKey === SS.Grid.chunkAt(SS.Loc.last.latitude, SS.Loc.last.longitude).key,
+        n: SS.Game.nodes.length
+      });
       if (!r) throw new Error('no zone');
-      if (r.lat !== '41.8827') throw new Error('anchored at ' + r.lat);
-      return r.n + ' sites around ' + r.lat;
+      if (r.lat !== '41.8827') throw new Error('the fix itself was wrong: ' + r.lat);
+      if (!r.inCell || !r.onCell) throw new Error('the fix did not put us in its own cell');
+      if (!r.n) throw new Error('no sites generated around the fix');
+      return r.n + ' sites in the cell holding ' + r.lat;
     });
 
     if (errors.length) { fail++; console.log('  FAIL page errors — ' + errors[0]); }
@@ -199,6 +210,16 @@ async function toGame(page, url) {
     await step('the GPS chip offers the way back', async () => {
       await page.evaluate(() => document.querySelectorAll('.modalBack').forEach(m => m.remove()));
       const before = await page.textContent('#wGps');
+      // Something else may be sitting on the chip — say what, rather than
+      // spending thirty seconds timing out on an invisible obstruction.
+      const blocked = await page.evaluate(() => {
+        const el = document.querySelector('#wGps');
+        const b = el.getBoundingClientRect();
+        const stack = document.elementsFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return stack[0] === el || el.contains(stack[0]) ? null :
+          stack.slice(0, 2).map(x => x.tagName + '.' + (x.className || '')).join(' / ');
+      });
+      if (blocked) throw new Error('the chip is covered by ' + blocked);
       await page.click('#wGps');
       await page.waitForTimeout(800);
       const r = await page.evaluate(() => ({ mode: SS.settings().locationMode,

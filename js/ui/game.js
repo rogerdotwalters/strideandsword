@@ -16,6 +16,7 @@ const Game = {
     this.mapless = false;
     this.instDoors = null; this._pendingInst = null;
     this.world = null; this._worldZone = null; this._worldBusy = false;
+    this._chunkBusy = false; this._lastChunkSync = 0;
     this.tiles = null; this.worldLayer = null;
     this.dungeonLayer = null; this.dungeonShapes = {}; this._pendingDungeon = null;
     this.artLayer = null;
@@ -133,10 +134,22 @@ const Game = {
       maxZoom: 24, minZoom: 12, zoomSnap: 0.5, zoomDelta: 0.5
     }).setView([start.latitude, start.longitude], s.mapZoom);
 
+    /* Tiles come from OSM's own servers on donated bandwidth, and this map
+       moves whenever the player does — a GPS fix a second, all day. So:
+
+         updateWhenIdle      wait for the pan to settle instead of requesting a
+                             row of tiles for every metre walked
+         updateWhenZooming   nothing fetched mid-animation
+         keepBuffer 3        a ring already in hand, so walking back over
+                             ground you just covered asks for nothing
+
+       https://operations.osmfoundation.org/policies/tiles/ */
     this.tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 24, maxNativeZoom: 19, minZoom: 12, keepBuffer: 3,
+      updateWhenIdle: true, updateWhenZooming: false,
       opacity: s.fantasyMap ? s.tileOpacity : 1,
-      attribution: "&copy; OpenStreetMap contributors"
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" ' +
+                   'target="_blank" rel="noopener">OpenStreetMap</a> contributors'
     }).addTo(this.map);
 
     this.worldLayer = L.layerGroup().addTo(this.map);   // fantasy roads + buildings
@@ -237,38 +250,151 @@ const Game = {
     }
   },
 
+  /**
+   * Settle which zone the player is standing in.
+   *
+   * A zone you made by hand wins wherever you are inside one — the office you
+   * set up deliberately is not paved over by the grid. Everywhere else, the
+   * 500 m chunk you are standing in *is* the zone, which is what lets the
+   * spawner, the placement scoring and the map editor carry on unchanged.
+   */
   ensureZone() {
-    if (this.zone || !Loc.last) return;
-    const existing = Zones.zonesFor(this.ch.userId);
-    const near = existing.find(z =>
-      haversine(z.centerLatitude, z.centerLongitude, Loc.last.latitude, Loc.last.longitude) < z.radius * 1.6);
-    if (near) {
-      this.zone = near;
-      this.nodes = Zones.nodesIn(near.zoneId);
-      // A zone marked hand-placed keeps only its authored sites. Procedural
-      // ones stay in storage untouched, so the flag is reversible.
-      if (this.zone.authoredOnly) this.nodes = this.nodes.filter(n => n.locationId);
-      else if (!this.nodes.length) this.nodes = Zones.generateNodes(near, null, this.ch.level);
-    } else {
-      this.zone = Zones.createZone(this.ch.userId, Loc.last.latitude, Loc.last.longitude, "Office Grounds");
-      this.nodes = Zones.generateNodes(this.zone, null, this.ch.level);
-      UI.toast("Zone anchored. " + this.nodes.length + " sites scattered nearby.", "good", 3400);
+    if (!Loc.last) return;
+    const here = Loc.last;
+
+    const authored = Zones.authoredAt(here.latitude, here.longitude);
+    const cell = Grid.chunkAt(here.latitude, here.longitude);
+    const zone = authored || Zones.forChunk(cell);
+
+    const moved = !this.zone || this.zone.zoneId !== zone.zoneId;
+    this.zone = zone;
+
+    if (moved) {
+      this.nodes = this.visibleNodes();
+      if (authored) {
+        if (authored.authoredOnly) this.nodes = this.nodes.filter(n => n.locationId);
+        else if (!Zones.nodesIn(authored.zoneId).length) {
+          this.nodes = Zones.generateNodes(authored, null, this.ch.level)
+            .concat(this.nodes);
+        }
+      }
+      const shifted = (typeof DB !== "undefined") ? DB.rehomeSeed(zone, here) : 0;
+      if (shifted) UI.toast("Placed " + shifted + " sample sites around you.", "good", 3000);
+      this.syncAuthoredLocations();
+      this.drawZone();
+      this.drawNodes();
+      this.drawDungeons();
+      this.drawInstanceDoors();
+      this.renderDungeonBar();
+      if (Instance.current()) this.enterInstanceView();
+      else this.renderInstanceBar();
     }
-    // The seed rows in data/*.json carry placeholder coordinates. Shift them
-    // onto this zone the first time one exists, so the samples are walkable
-    // from wherever you actually are.
-    const moved = (typeof DB !== "undefined") ? DB.rehomeSeed(this.zone) : 0;
-    if (moved) UI.toast("Placed " + moved + " sample sites around you.", "good", 3000);
-    if (typeof Spawner !== "undefined") { try { Spawner.tick(this.zone); } catch (e) {} }
+    this.syncChunks();
+  },
+
+  /**
+   * Every node worth having on screen: whatever belongs to the chunks in
+   * range, plus anything in a hand-made zone you are standing in.
+   */
+  visibleNodes() {
+    const here = Loc.last;
+    if (!here) return [];
+    /* A hand-made zone marked authoredOnly shows what you put in it and
+       nothing else. That rule belongs here rather than in ensureZone, which is
+       where it used to live: ensureZone only runs when you cross into a
+       different zone, so every later chunk sync quietly put the procedural
+       sites back. */
+    const only = Zones.authoredOnlyAt(here.latitude, here.longitude);
+    if (only) return Zones.nodesIn(only.zoneId).filter(n => n.locationId);
+    const ids = Chunks.inRange(here.latitude, here.longitude)
+      .map(c => (Chunks.get(c.key) || {}).zoneId)
+      .filter(Boolean);
+    if (this.zone && ids.indexOf(this.zone.zoneId) < 0) ids.push(this.zone.zoneId);
+    return this.keepIdentity(Zones.nodesInAny(ids));
+  },
+
+  /**
+   * Rebuild the visible list without swapping out the objects.
+   *
+   * Everything else in the game holds a *reference* to a node — the open
+   * combat, the marker's click handler, the `_seen` flag the sight radius
+   * flips. Handing back fresh objects from storage silently orphans all of
+   * that: a fight resolved against the old object would write a cleared status
+   * that the new array never showed. Surveys are slow enough now that a chunk
+   * sync lands mid-fight regularly, so this stopped being theoretical.
+   */
+  keepIdentity(rows) {
+    const live = {};
+    (this.nodes || []).forEach(n => { live[n.nodeId] = n; });
+    return rows.map(row => {
+      const had = live[row.nodeId];
+      if (!had) return row;
+      Object.assign(had, row);      // storage is the truth for stored fields
+      return had;                   // the object everyone already points at
+    });
+  },
+
+  /**
+   * Bring the chunked world up to date. Surveys are slow and rate-limited, so
+   * this never runs more than once at a time and never more than twice a
+   * minute unless something asks it to.
+   */
+  async syncChunks(opts) {
+    opts = opts || {};
+    if (this._chunkBusy || !Loc.last || typeof Chunks === "undefined") return 0;
+    const now = opts.now || Date.now();
+    if (!opts.force && this._lastChunkSync && now - this._lastChunkSync < 20000) return 0;
+    this._chunkBusy = true;
+    this._lastChunkSync = now;
+    let r = null;
+    try {
+      r = await Chunks.sync(Loc.last.latitude, Loc.last.longitude, this.ch, {
+        now,
+        // Draw as soon as the cell underfoot lands, rather than after all of
+        // them — a cold start is one query to a usable map, not five.
+        onCell: (cell, res) => {
+          if (this._drewFirstCell) return;
+          // Even with no geometry there are sites to show.
+          this.nodes = this.visibleNodes();
+          if (!res.digest) { this.drawNodes(); return; }
+          this._drewFirstCell = true;
+          this.world = Chunks.mergedWorld();
+          this.renderWorld(this.world);
+          this.nodes = this.visibleNodes();
+          this.drawNodes();
+        }
+      });
+      this._drewFirstCell = false;
+    } catch (e) {
+      console.warn("[chunks]", e && e.message);
+    } finally {
+      this._chunkBusy = false;
+    }
+    if (!r) return 0;
+
+    if (r.failed && !this.world) {
+      UI.toast("Couldn't reach the map data service — showing the plain map. " +
+               "Try 'Resurvey the streets' from the menu later.", "bad", 6000);
+    }
+    if (!r.changed) return 0;
+
+    // The drawn town is the union of whatever is loaded right now.
+    const world = Chunks.mergedWorld();
+    this.world = world.buildings.length || world.roads.length ? world : null;
+    if (this.world) {
+      this.renderWorld(this.world);
+      this.snapNodesToBuildings(this.world);
+    }
+    this.applyZoomDetail();
+
+    this.nodes = this.visibleNodes();
     this.syncAuthoredLocations();
-    this.drawZone();
+    this.runSpawner({ force: true, now });
     this.drawNodes();
     this.drawDungeons();
     this.drawInstanceDoors();
-    this.renderDungeonBar();
-    if (Instance.current()) this.enterInstanceView();
-    else this.renderInstanceBar();
-    this.loadWorld();
+    this.refreshDevReadout();
+    return r.changed;
   },
 
   /**
@@ -291,7 +417,16 @@ const Game = {
     this._lastSpawnCheck = now;
     let n = 0;
     try {
-      n = Spawner.tick(this.zone, opts);
+      // One dungeon per loaded chunk, so the world fills in as you explore.
+      const zones = typeof Chunks !== "undefined" ? Chunks.loadedZones() : [];
+      if (zones.every(z => z.zoneId !== this.zone.zoneId)) zones.push(this.zone);
+      const at = Loc.last ? { latitude: Loc.last.latitude, longitude: Loc.last.longitude } : null;
+      zones.forEach(z => { n += Spawner.tick(z, Object.assign({ at }, opts)); });
+      // Instances are not per chunk. They belong to the 2 km region, and last
+      // days rather than hours, so they get their own pass from wherever the
+      // player actually is.
+      if (Loc.last) n += Spawner.tickAt(Loc.last.latitude, Loc.last.longitude,
+                                        Object.assign({ at }, opts));
     } catch (e) {
       console.warn("[spawn]", e && e.message);
       return 0;
@@ -420,46 +555,33 @@ const Game = {
     return changed;
   },
 
-  /* ---- The fantasy town: real OSM geometry, renamed and restyled ---- */
+  /* ---- The fantasy town: real OSM geometry, renamed and restyled ----
+
+     Surveying moved into Chunks when the world became a grid — there is no
+     single area to fetch any more, so loadWorld is now a thin shim that means
+     "throw the geometry away and go round again". Everything it used to do is
+     in Chunks.sync, which does it one cell at a time. */
   async loadWorld(force) {
-    if (this.mapless || !this.zone || this._worldBusy) return;
+    if (this.mapless) return;
     if (!settings().fantasyMap) return;
-    if (this._worldZone === this.zone.zoneId && !force) return;
-    this._worldBusy = true;
-    this._worldZone = this.zone.zoneId;
-
-    const cacheKey = OSM.cacheKey(this.zone);
-    let elements = force ? null : Store.get(cacheKey, null);
-
-    if (!elements) {
-      UI.toast("Surveying the streets…", "info", 2600);
-      const r = await OSM.fetchAround(this.zone.centerLatitude, this.zone.centerLongitude,
-                                      Math.round(this.zone.radius + 140));
-      if (!r.success) {
-        this._worldBusy = false;
-        this._worldZone = null;
-        UI.toast("Couldn't reach the map data service — showing the plain map. " +
-                 "Try 'Resurvey the streets' from the menu later.", "bad", 6000);
-        this.applyZoomDetail();   // no overlay, so the plain map goes to full
-        return;
-      }
-      elements = r.elements;
-      // Cache geometry so a reload is instant and works offline.
-      try {
-        const payload = JSON.stringify(elements);
-        if (payload.length < 2000000) Store.set(cacheKey, elements);
-      } catch (e) { /* over quota — fine, we just refetch next time */ }
+    if (force && typeof Chunks !== "undefined") {
+      /* Only the cells in range. Dropping every cached cell you have ever
+         walked through would mean re-querying all of them — a hundred queries
+         to redraw the seven you can see, which is exactly the kind of thing
+         the Overpass usage policy is asking us not to do. The rest re-survey
+         on their own when you next walk into them and their month is up. */
+      const here = Loc.last;
+      const keys = here ? Chunks.inRange(here.latitude, here.longitude).map(c => c.key)
+                        : Object.keys(Chunks.all());
+      keys.forEach(k => {
+        Store.remove(Chunks.cacheKeyFor(k));
+        Chunks.put(k, { cacheBytes: 0, surveyedAt: 0, failedAt: 0, failCount: 0 });
+        delete Chunks.loaded[k];
+      });
+      if (typeof OSM !== "undefined") OSM.clearCoolOff();
+      this.world = null;
     }
-
-    const world = OSM.digest(elements);
-    this.world = world;
-    this.renderWorld(world);
-    this.snapNodesToBuildings(world);
-    this._worldBusy = false;
-
-    const st = Atlas.stats();
-    UI.toast("The town takes shape: " + world.buildings.length + " buildings and " +
-             st.streetNames + " named roads.", "good", 4200);
+    return this.syncChunks({ force: true });
   },
 
   renderWorld(world) {
@@ -563,9 +685,11 @@ const Game = {
   snapNodesToBuildings(world) {
     if (!settings().snapNodesToBuildings || !world.buildings.length) return;
     const taken = new Set(this.nodes.map(n => n.anchorKey).filter(Boolean));
-    const MIN_GAP = 34;         // the same spacing the generator guarantees
-    const MIN_FROM_HOME = 45;  // and the same inner radius of its ring
+    const MIN_GAP = 34;          // the same spacing the generator guarantees
+    const MIN_FROM_PLAYER = 45;  // and the same "nothing at your feet" floor
     const range = +Placement.rulesFor("locations").snapRangeM || 75;
+    const zones = Store.get(K.zones, {}) || {};
+    const here = Loc.last;
     let moved = 0;
     this.nodes.forEach(n => {
       if (n.anchorKey || n.status === "cleared") return;
@@ -574,20 +698,22 @@ const Game = {
       if (n.locationId) return;
 
       // Every building in range that doesn't shove this site onto a neighbour,
-      // and doesn't drag it inside the ring the generator placed it in. That
-      // second rule matters more now than it used to: nearest-wins rarely moved
-      // a node far, but a weighted pick will happily reach the full range, and
-      // a site pulled in to 34 m undoes the "nothing spawns on top of you"
-      // floor that generateNodes works to keep.
-      const zc = this.zone;
+      // doesn't drag it out of the zone it belongs to, and doesn't drop it at
+      // your feet. Those last two used to be one test against "the zone you are
+      // standing in", which only worked while a zone was anchored on the
+      // player. On a grid the centre of a chunk is a grid line, so containment
+      // has to be measured against each node's OWN zone, and "nothing on top of
+      // you" against where you actually are — otherwise a weighted pick, which
+      // will happily reach the full 75 m, can land a site on your shoe.
+      const zc = zones[n.zoneId];
       const legal = Atlas.nearBuildings(n.latitude, n.longitude, range, taken).filter(cand => {
-        if (zc) {
-          const fromHome = haversine(zc.centerLatitude, zc.centerLongitude,
-                                     cand.row.latitude, cand.row.longitude);
-          if (fromHome < MIN_FROM_HOME || fromHome > zc.radius) return false;
-        }
+        const p = cand.row;
+        if (zc && haversine(zc.centerLatitude, zc.centerLongitude, p.latitude, p.longitude) > zc.radius)
+          return false;
+        if (here && haversine(here.latitude, here.longitude, p.latitude, p.longitude) < MIN_FROM_PLAYER)
+          return false;
         return this.nodes.every(o => o === n ||
-          haversine(cand.row.latitude, cand.row.longitude, o.latitude, o.longitude) >= MIN_GAP);
+          haversine(p.latitude, p.longitude, o.latitude, o.longitude) >= MIN_GAP);
       });
       if (!legal.length) return;
 
@@ -697,9 +823,27 @@ const Game = {
     });
   },
 
+  /** Is this close enough to make out? Anything further is a "?" on the map. */
+  inSight(n) {
+    const p = Loc.last;
+    if (!p) return false;
+    const r = +settings().sightRadiusM || 300;
+    return haversine(p.latitude, p.longitude, n.latitude, n.longitude) <= r;
+  },
+
   drawNode(n) {
     if (this.mapless) { this.renderListView(); return; }
     if (this.nodeMarkers[n.nodeId]) { this.map.removeLayer(this.nodeMarkers[n.nodeId]); }
+    const seen = this.inSight(n);
+    n._seen = seen;
+
+    const icon = seen ? this.nodeIcon(n) : this.unknownIcon();
+    const m = L.marker([n.latitude, n.longitude], { icon }).addTo(this.map);
+    m.on("click", () => { if (this.inSight(n)) this.openNode(n); else this.peekNode(n); });
+    this.nodeMarkers[n.nodeId] = m;
+  },
+
+  nodeIcon(n) {
     const cleared = n.status === "cleared";
     const html =
       '<div class="pin ' + n.type + (cleared ? " cleared" : "") + (n.closed ? " closed" : "") +
@@ -707,12 +851,42 @@ const Game = {
         (cleared ? "✓" : n.closed ? "🕒" : n.icon) +
         (n.type !== "landmark" && !cleared ? '<span class="diff">' + n.difficulty + "</span>" : "") +
       "</div>";
-    const icon = L.divIcon({ html, className: "pinWrap",
+    return L.divIcon({ html, className: "pinWrap",
       iconSize: [n.type === "boss" ? 42 : 34, n.type === "boss" ? 42 : 34],
       iconAnchor: [n.type === "boss" ? 21 : 17, n.type === "boss" ? 21 : 17] });
-    const m = L.marker([n.latitude, n.longitude], { icon }).addTo(this.map);
-    m.on("click", () => this.openNode(n));
-    this.nodeMarkers[n.nodeId] = m;
+  },
+
+  /* Out of sight: you know something is there, not what. The generated world
+     is much bigger than the visible one, so without this every chunk you had
+     ever entered would be on screen at once and none of it worth walking to. */
+  unknownIcon() {
+    return L.divIcon({ html: '<div class="pin unknown">?</div>', className: "pinWrap",
+                       iconSize: [26, 26], iconAnchor: [13, 13] });
+  },
+
+  peekNode(n) {
+    const d = Loc.distanceTo(n);
+    UI.toast("Something over there — " + fmtDist(d) + " away. Get closer to see what.", "info", 2400);
+  },
+
+  /**
+   * Swap icons for anything that has crossed the sight boundary since the last
+   * fix. Called on every position update, so it does the cheap thing: nothing
+   * at all unless a node actually changed state.
+   */
+  updateSight() {
+    if (this.mapless || !this.map) return 0;
+    let flipped = 0;
+    this.nodes.forEach(n => {
+      const m = this.nodeMarkers[n.nodeId];
+      if (!m) return;
+      const seen = this.inSight(n);
+      if (seen === n._seen) return;
+      n._seen = seen;
+      m.setIcon(seen ? this.nodeIcon(n) : this.unknownIcon());
+      flipped++;
+    });
+    return flipped;
   },
 
   /* ---- Position pipeline ---- */
@@ -771,6 +945,7 @@ const Game = {
 
     this.ensureZone();
     this.runSpawner();
+    this.updateSight();
     this.checkProximity();
     this.renderHud();
     this.refreshDevReadout();
@@ -782,8 +957,29 @@ const Game = {
      see how far you have to walk to be inside it rather than guessing from a
      pin. Circles and rectangles are the only two shapes, which is what keeps
      both the drawing and the containment test honest. */
+  /**
+   * What to draw, by distance rather than by zone.
+   *
+   * Zone membership was the right filter when there was one zone. With a grid
+   * it is the wrong one twice over: a dungeon in the chunk next door is
+   * plainly visible from here and would be hidden, and an instance belongs to
+   * a 2 km region that spans sixteen chunks and so belongs to no zone at all.
+   * Distance is what a player can actually perceive, so distance is the test.
+   */
+  drawRangeM() {
+    return (+settings().sightRadiusM || 300) + (+settings().chunkLoadRadiusM || 350);
+  },
+
+  withinDrawRange(rows) {
+    const p = Loc.last;
+    if (!p) return [];
+    const max = this.drawRangeM();
+    return rows.filter(d => d.active !== false &&
+      haversine(p.latitude, p.longitude, d.latitude, d.longitude) <= max + (+d.radius || 0));
+  },
+
   dungeons() {
-    return this.zone ? Content.dungeonsFor(this.zone.zoneId).filter(d => d.active !== false) : [];
+    return this.withinDrawRange(Content.list("dungeons"));
   },
 
   drawDungeons() {
@@ -878,7 +1074,7 @@ const Game = {
      Doors on the real map, and behind each one a floor of its own. */
 
   instances() {
-    return this.zone ? Content.instancesFor(this.zone.zoneId).filter(d => d.active !== false) : [];
+    return this.withinDrawRange(Content.list("instances"));
   },
 
   drawInstanceDoors() {

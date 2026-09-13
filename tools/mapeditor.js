@@ -214,6 +214,39 @@ async function clickMap(page, dx, dy) {
     return '320 → 700 m, persisted';
   });
 
+  await step('the generated chunks stay out of the zone picker', async () => {
+    const r = await page.evaluate(() => {
+      // Half a dozen cells of the kind a walk leaves behind.
+      const made = [];
+      ME.Store.patch(ME.K.zones, (all) => {
+        for (let i = 0; i < 6; i++) {
+          const id = 'zn_chunk_' + i;
+          all[id] = { zoneId: id, userId: 'world', shared: true, kind: 'chunk',
+                      chunkKey: 'c9259_' + (-14423 + i), label: 'Chunk 9259,' + (-14423 + i),
+                      centerLatitude: 41.88 + i / 1000, centerLongitude: -87.62,
+                      radius: 354, seed: 's' + i };
+          made.push(id);
+        }
+      });
+      ME.Me.renderZonePicker();
+      ME.Me.renderStatus();
+      const opts = Array.from(document.querySelectorAll('#meZone option')).map(o => o.textContent);
+      return {
+        made: made.length,
+        offered: opts,
+        picked: ME.Me.zones().length,
+        total: ME.Me.allZones().length,
+        status: document.querySelector('#meStatus').textContent
+      };
+    });
+    const strays = r.offered.filter(t => /Chunk /.test(t));
+    if (strays.length) throw new Error('the picker offered ' + strays.length + ' generated chunk(s)');
+    if (r.total - r.picked !== r.made) throw new Error('chunk zones were deleted rather than hidden');
+    if (!/6<\/b> generated chunks|6 generated chunks/.test(r.status))
+      throw new Error('the status bar does not account for them: ' + r.status.trim());
+    return r.made + ' chunks hidden, ' + r.offered.length + ' zone(s) still offered';
+  });
+
   await step('validation catches a malformed time window', async () => {
     await page.fill('#f_timeStart', '9am');
     await page.fill('#f_timeEnd', '17:00');
@@ -576,18 +609,31 @@ async function clickMap(page, dx, dy) {
 
   await step('a hand-placed zone stops scattering procedural sites', async () => {
     const r = await g.evaluate(() => {
-      const zone = SS.Game.zone;
-      const proceduralBefore = SS.Zones.nodesIn(zone.zoneId).filter(n => !n.locationId).length;
-      zone.authoredOnly = true;
+      // A hand-placed zone, not the chunk we happen to be standing in — the
+      // grid's own zones are not something anybody authored, and flagging one
+      // authoredOnly says nothing about the feature under test.
+      const p = SS.Loc.last;
+      const zone = SS.Zones.createZone('editor', p.latitude, p.longitude, 'The Office');
+      zone.shared = true; zone.authoredOnly = true;
       SS.Store.patch(SS.K.zones, all => { all[zone.zoneId] = zone; });
-      // re-enter the zone the way the game does on load
+      const made = SS.Zones.generateNodes(zone, 6, 3);
+      const proceduralBefore = SS.Zones.nodesIn(zone.zoneId).filter(n => !n.locationId).length;
+
+      // Re-enter it the way the game does on load.
       SS.Game.zone = null; SS.Game.nodes = [];
       SS.Game.ensureZone();
+      const entered = SS.Game.zone.zoneId === zone.zoneId;
       const live = SS.Game.nodes.length;
+      // And again the way every later chunk sync does, which is where this
+      // used to come undone.
+      SS.Game.nodes = SS.Game.visibleNodes();
+      const afterSync = SS.Game.nodes.length;
       const stillStored = SS.Zones.nodesIn(zone.zoneId).filter(n => !n.locationId).length;
       const respawned = SS.Zones.respawnCleared(zone, 5);
-      return { proceduralBefore, live, stillStored, respawned };
+      return { proceduralBefore, live, afterSync, stillStored, respawned, entered, made: made.length };
     });
+    if (!r.entered) throw new Error('the game did not enter the hand-placed zone');
+    if (r.afterSync) throw new Error(r.afterSync + ' sites came back on the next chunk sync');
     if (!r.proceduralBefore) throw new Error('no procedural sites to begin with');
     if (r.live) throw new Error(r.live + ' sites still live in a hand-placed zone');
     if (r.stillStored !== r.proceduralBefore) throw new Error('procedural sites were destroyed, not hidden');

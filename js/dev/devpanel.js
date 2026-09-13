@@ -36,6 +36,12 @@ Object.assign(Game, {
         // What the spawner is up to, and two ways to hurry it along. The
         // schedule is measured in hours, so without these you would be
         // waiting a long time to see whether any of it works.
+        '<div class="sect tiny">The chunked world</div>' +
+        '<p class="devNote" id="dvChunks"></p>' +
+        '<div class="grid2">' +
+          '<button class="btn sm" id="dvChunkSync">Load chunks now</button>' +
+          '<button class="btn sm danger" id="dvChunkReset">Wipe chunks</button>' +
+        "</div>" +
         '<div class="sect tiny">Spawning</div>' +
         '<p class="devNote" id="dvSpawn"></p>' +
         '<div class="grid2">' +
@@ -77,14 +83,37 @@ Object.assign(Game, {
     $("#dvStop").onclick = () => { if (this._simWalk) { clearInterval(this._simWalk); this._simWalk = null; UI.toast("Sim stopped.", "info", 1400); } };
     $("#dvSeed").onclick = () => this.seedTestData();
 
+    $("#dvChunkSync").onclick = () => {
+      UI.toast("Surveying…", "info", 1600);
+      this.syncChunks({ force: true }).then(n => {
+        UI.toast(n ? "Chunks updated." : "Nothing new to load.", n ? "good" : "info", 2200);
+        this.refreshSpawnReadout();
+      });
+    };
+    $("#dvChunkReset").onclick = () => {
+      if (typeof Chunks === "undefined") return;
+      const n = Chunks.reset();
+      this.nodes = [];
+      this.world = null;
+      this._lastChunkSync = 0;
+      if (!this.mapless && this.worldLayer) this.worldLayer.clearLayers();
+      this.drawNodes();
+      this.refreshSpawnReadout();
+      UI.toast("Wiped " + n + " generated sites. Walk, or hit Load chunks.", "info", 3000);
+    };
+
     $("#dvSpawnNow").onclick = () => {
       if (typeof Spawner === "undefined" || !this.zone) { UI.toast("No zone yet.", "bad"); return; }
       // Clear the gap and the day's allowance so something actually lands,
       // then run the normal tick — no special spawn path to get out of step.
+      // Clear the gap, and let the region roll again, so something lands now.
       const st = Spawner.state(this.zone.zoneId);
       st.nextDungeonAt = 0;
-      st.target = Math.max(st.target || 0, (st.spawned || 0) + 1);
       Spawner.saveState(this.zone.zoneId, st);
+      if (Loc.last && typeof Grid !== "undefined") {
+        const region = Grid.regionAt(Loc.last.latitude, Loc.last.longitude);
+        Spawner.saveRegionState(region.key, { rolled: 0, target: 0 });
+      }
       const n = this.runSpawner({ force: true });
       UI.toast(n ? "Spawned " + n + "." : "Nothing to spawn — no places surveyed yet.",
                n ? "good" : "bad", 2600);
@@ -112,30 +141,63 @@ Object.assign(Game, {
     this.refreshDevReadout();
   },
 
+  /**
+   * Keep the panel clear of the HUD it is floating over.
+   *
+   * The panel has grown a section at a time — the chunked world and the
+   * spawner are the newest — and on a phone-sized screen it had quietly got
+   * tall enough to sit on top of the GPS chip, swallowing clicks meant for it.
+   * A fixed max-height in CSS cannot know that, because the bar stack below
+   * changes height whenever a dungeon or instance run is going. So the cap is
+   * measured from where the bars actually start, and re-measured whenever the
+   * panel is rebuilt.
+   */
+  fitDevPanel() {
+    const host = $("#devPanel"), body = host && host.querySelector(".db");
+    const bars = document.querySelector(".bars");
+    if (!host || !body || !bars || host.classList.contains("hidden")) return;
+    const top = host.getBoundingClientRect().top;
+    const head = host.querySelector(".dh");
+    const headH = head ? head.getBoundingClientRect().height : 0;
+    const room = bars.getBoundingClientRect().top - top - headH - 12;
+    body.style.maxHeight = Math.max(120, Math.round(room)) + "px";
+  },
+
   /* ------------------------------------------------- authored content jump
      Locations, dungeons and instances all get listed together, because when
      you are testing you do not care which of the three a thing is — you care
      that you just placed it and want to be standing on it. */
 
   devTargets() {
-    if (!this.zone) return [];
     const out = [];
-    Content.locationsFor(this.zone.zoneId).forEach(l => out.push({
+    /* Everything anywhere, sorted by distance. With a chunked world there is
+       no single zone to list, and "the nearest twenty things" is what you
+       actually want when you are testing. */
+    Content.list("locations").forEach(l => out.push({
       kind: "location", id: l.locationId, name: l.name || "(unnamed location)",
       icon: l.image ? "🖼️" : "📍", lat: l.latitude, lng: l.longitude, row: l
     }));
-    Content.dungeonsFor(this.zone.zoneId).forEach(d => out.push({
-      kind: "dungeon", id: d.dungeonId, name: d.name || "(unnamed dungeon)",
+    Content.list("dungeons").forEach(d => out.push({
+      kind: "dungeon", id: d.dungeonId,
+      name: (d.name || "(unnamed dungeon)") + (d.origin === "auto" ? " ·auto" : ""),
       icon: Content.dungeonKind(d.kind).icon, lat: d.latitude, lng: d.longitude, row: d
     }));
-    Content.instancesFor(this.zone.zoneId).forEach(d => out.push({
-      kind: "instance", id: d.instanceId, name: d.name || "(unnamed instance)",
+    Content.list("instances").forEach(d => out.push({
+      kind: "instance", id: d.instanceId,
+      name: (d.name || "(unnamed instance)") + (d.origin === "auto" ? " ·auto" : ""),
       icon: Content.instanceKind(d.kind).icon, lat: d.latitude, lng: d.longitude, row: d
     }));
+    (this.nodes || []).forEach(n => {
+      if (n.locationId) return;               // already listed as a location
+      out.push({
+        kind: "node", id: n.nodeId, name: n.name || "(site)",
+        icon: n.icon || "📍", lat: n.latitude, lng: n.longitude, row: n
+      });
+    });
     const p = Loc.last;
     if (p) out.forEach(t => { t.dist = haversine(p.latitude, p.longitude, t.lat, t.lng); });
     out.sort((a, b) => (a.dist == null ? 0 : a.dist) - (b.dist == null ? 0 : b.dist));
-    return out;
+    return out.slice(0, 25);
   },
 
   fillDevJump() {
@@ -184,6 +246,8 @@ Object.assign(Game, {
         if (!gate.ok) { UI.toast(gate.why, "bad", 3000); return; }
         const paused = Dungeon.pausedFor(t.id);
         if (paused) Dungeon.resume(t.row); else Dungeon.begin(t.row);
+      } else if (t.kind === "node") {
+        this.openNode(t.row);
       } else {
         const node = this.nodes.find(n => n.locationId === t.id);
         if (!node) { UI.toast("That location has no node yet — hit Reload authored.", "bad", 3000); return; }
@@ -199,15 +263,39 @@ Object.assign(Game, {
     if (typeof Spawner === "undefined" || !this.zone) { out.textContent = "no zone"; return; }
     const s = Spawner.status(this.zone);
     const mins = (ms) => ms ? Math.max(1, Math.round(ms / 60000)) + " min" : "—";
+    const hrs = (ms) => ms ? (ms / 3600000).toFixed(1) + " h" : "—";
     out.innerHTML =
       "places surveyed " + s.places + "<br>" +
-      "dungeons " + s.dungeons + " · expires in " + mins(s.dungeonExpiresInMs) +
-        " · next in " + mins(s.nextDungeonInMs) + "<br>" +
-      "instances " + s.instances + " live · " + s.instancesToday + "/" + s.instanceTarget + " today";
+      "dungeons " + s.dungeons + " here · expires " + mins(s.dungeonExpiresInMs) +
+        " · next " + mins(s.nextDungeonInMs) + "<br>" +
+      "instances " + s.instances + " over " + s.regions + " region(s) · expires " +
+        hrs(s.instanceExpiresInMs);
+
+    const ch = $("#dvChunks");
+    if (ch && typeof Chunks !== "undefined") {
+      const p = Loc.last;
+      const c = Chunks.status(p && p.latitude, p && p.longitude);
+      /* The map-service line is here rather than buried in a console: this is
+         somebody else's donated server, and "how much have we asked of it"
+         should be as visible as anything else the panel reports. */
+      const cool = c.coolOffMs
+        ? '<span style="color:var(--warn)">backing off ' + Math.ceil(c.coolOffMs / 1000) + "s</span>"
+        : (c.waiting ? c.waiting + " cell(s) waiting to retry" : "clear");
+      ch.innerHTML =
+        "here " + c.here + " · region " + c.region + "<br>" +
+        "chunks " + c.loaded + " loaded / " + c.inRange + " in range / " + c.known + " known<br>" +
+        "geometry " + c.cacheKB + " KB of " + c.budgetKB + " KB in " + c.cached +
+          " cell(s) · " + c.nodes + " sites<br>" +
+        "overpass " + c.queriesOk + "/" + c.queries + " queries" +
+          (c.deferred ? " · " + c.deferred + " held back" : "") + " · " + cool;
+    }
   },
 
   refreshDevReadout() {
     this.refreshSpawnReadout();
+    // Cheap, and the bar stack below grows and shrinks with a dungeon run, so
+    // the cap is re-measured here rather than only when the panel is built.
+    this.fitDevPanel();
     const out = $("#dvOut");
     if (!out) return;
     const p = Loc.last;

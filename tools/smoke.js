@@ -263,9 +263,13 @@ async function run(withLeaflet, withOverpass) {
     return info.n + ' nodes ' + JSON.stringify(info.types);
   });
 
-  await step('procedural nodes sit inside the zone radius and are spaced apart', async () => {
+  await step('procedural nodes stay inside their own chunk and are spaced apart', async () => {
+    // The world is a grid now, so "inside the zone radius" has to mean inside
+    // the zone each node actually belongs to — nodes on screen come from every
+    // chunk in range, and measuring all of them from the chunk you happen to be
+    // standing in would fail for the neighbours by design.
     const bad = await page.evaluate(() => {
-      const z = SS.Game.zone;
+      const zones = SS.Store.get(SS.K.zones, {}) || {};
       // Only the scattered ones. A hand-placed location goes exactly where it
       // was put, radius and spacing included, and that is the point of it.
       const ns = SS.Game.nodes.filter(n => !n.locationId);
@@ -275,19 +279,28 @@ async function run(withLeaflet, withOverpass) {
         const s = Math.sin(dLat / 2) ** 2 + Math.cos(tr(a)) * Math.cos(tr(c)) * Math.sin(dLon / 2) ** 2;
         return 2 * R * Math.asin(Math.sqrt(s));
       };
-      let outside = 0, tooClose = 0, minD = 1e9, maxD = 0;
+      const here = SS.Loc.last;
+      const SNAP = 80;                 // a node may be nudged onto a building
+      let outside = 0, tooClose = 0, onTop = 0, maxD = 0;
+      const byZone = {};
       ns.forEach(n => {
+        const z = zones[n.zoneId];
+        if (!z) { outside++; return; }
         const d = H(z.centerLatitude, z.centerLongitude, n.latitude, n.longitude);
-        minD = Math.min(minD, d); maxD = Math.max(maxD, d);
-        if (d > z.radius + 1 || d < 44) outside++;
+        maxD = Math.max(maxD, d);
+        if (d > (+z.radius || 0) + SNAP) outside++;
+        if (here && H(here.latitude, here.longitude, n.latitude, n.longitude) < 40) onTop++;
+        (byZone[n.zoneId] = byZone[n.zoneId] || []).push(n);
       });
-      for (let i = 0; i < ns.length; i++) for (let j = i + 1; j < ns.length; j++)
-        if (H(ns[i].latitude, ns[i].longitude, ns[j].latitude, ns[j].longitude) < 33) tooClose++;
-      return { outside, tooClose, count: ns.length,
-               minD: Math.round(minD), maxD: Math.round(maxD), radius: z.radius };
+      Object.values(byZone).forEach(list => {
+        for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++)
+          if (H(list[i].latitude, list[i].longitude, list[j].latitude, list[j].longitude) < 33) tooClose++;
+      });
+      return { outside, tooClose, onTop, count: ns.length,
+               zones: Object.keys(byZone).length, maxD: Math.round(maxD) };
     });
-    if (bad.outside || bad.tooClose) throw new Error(JSON.stringify(bad));
-    return bad.count + ' procedural, spread ' + bad.minD + '–' + bad.maxD + ' m within ' + bad.radius + ' m';
+    if (bad.outside || bad.tooClose || bad.onTop) throw new Error(JSON.stringify(bad));
+    return bad.count + ' procedural across ' + bad.zones + ' chunk(s), furthest ' + bad.maxD + ' m from its own centre';
   });
 
   if (withOverpass) {
@@ -392,6 +405,11 @@ async function run(withLeaflet, withOverpass) {
     });
 
     await step('sites snapped onto real buildings', async () => {
+      // Surveys are spaced now, so the cells around you land over several
+      // seconds rather than all at once. Wait for the sweep to finish before
+      // asking what it managed — otherwise this measures the rate limiter.
+      await page.waitForFunction(() => !SS.Game._chunkBusy, null, { timeout: 30000 }).catch(() => {});
+      await page.waitForTimeout(300);
       const r = await page.evaluate(() => {
         const anchored = SS.Game.nodes.filter(n => n.anchorKey);
         const t = SS.Atlas.table('buildings');
@@ -758,12 +776,29 @@ async function run(withLeaflet, withOverpass) {
   });
 
   await step('resuming a saved character re-enters the same zone', async () => {
+    // There is no single zone any more — standing still means a handful of
+    // chunk zones, one per cell in range. So the thing worth asserting is that
+    // resuming REUSES them: the same chunk keys, no second row for any cell,
+    // and the zone you end up in is the one covering where you are standing.
+    const before = await page.evaluate(() =>
+      Object.values(SS.Store.get(SS.K.zones, {}) || {}).map(z => z.chunkKey || z.zoneId).sort());
     await page.click('#charList .pick');
     await page.waitForSelector('#map', { timeout: 5000 });
     await page.waitForTimeout(2000);
-    const r = await page.evaluate(() => ({ zones: Object.keys(SS.Store.get(SS.K.zones, {})).length, nodes: SS.Game.nodes.length }));
-    if (r.zones !== 1) throw new Error('created a duplicate zone: ' + r.zones);
-    return r.zones + ' zone, ' + r.nodes + ' nodes';
+    const r = await page.evaluate(() => {
+      const all = Object.values(SS.Store.get(SS.K.zones, {}) || {});
+      const keys = all.map(z => z.chunkKey || z.zoneId).sort();
+      const dupes = keys.filter((k, i) => i && k === keys[i - 1]);
+      const here = SS.Loc.last;
+      const cell = SS.Grid.chunkAt(here.latitude, here.longitude);
+      return { keys, dupes, nodes: SS.Game.nodes.length,
+               onCell: SS.Game.zone.chunkKey === cell.key || SS.Game.zone.kind !== 'chunk' };
+    });
+    if (r.dupes.length) throw new Error('duplicate zone rows for ' + r.dupes.join(', '));
+    const added = r.keys.filter(k => before.indexOf(k) < 0);
+    if (added.length) throw new Error('resuming created ' + added.length + ' new zone(s): ' + added.join(', '));
+    if (!r.onCell) throw new Error('resumed into the wrong zone for this cell');
+    return r.keys.length + ' zones reused, ' + r.nodes + ' nodes';
   });
 
   console.log('  ---- ' + pass + ' passed, ' + fail + ' failed');

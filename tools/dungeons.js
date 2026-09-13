@@ -256,7 +256,12 @@ async function walkUntil(page, done, budget) {
   await step('an authored dungeon is drawn on the game map', async () => {
     const r = await g.evaluate(() => {
       const z = SS.Game.zone;
-      const d = SS.Content.blankDungeon(z.centerLatitude, z.centerLongitude, z.zoneId);
+      // On the player, not on the zone centre. A zone is a 500 m grid cell now,
+      // so its centre is a grid line up to 350 m away — placing a 60x40 m
+      // footprint there and then asserting you are standing in it tests the
+      // grid's arithmetic rather than the dungeon.
+      const p = SS.Loc.last;
+      const d = SS.Content.blankDungeon(p.latitude, p.longitude, z.zoneId);
       d.name = 'The Sump'; d.kind = 'cave'; d.shape = 'rect';
       d.width = 60; d.height = 40; d.entryRange = 25; d.minLevel = 1;
       d.respawnMinutes = 180;
@@ -281,12 +286,12 @@ async function walkUntil(page, done, budget) {
 
   await step('the door stays shut from too far away, and below the level', async () => {
     const far = await g.evaluate(() => {
-      const d = SS.Content.list('dungeons')[0];
+      const d = SS.Content.list('dungeons').find(d => d.origin !== 'auto');
       return SS.Dungeon.canEnter(d, 400);
     });
     if (far.ok) throw new Error('let us in from 400 m');
     const low = await g.evaluate(() => {
-      const d = SS.Content.list('dungeons')[0];
+      const d = SS.Content.list('dungeons').find(d => d.origin !== 'auto');
       d.minLevel = 9; SS.Content.save('dungeons', d);
       const gate = SS.Dungeon.canEnter(d, 0);
       d.minLevel = 1; SS.Content.save('dungeons', d);
@@ -297,7 +302,7 @@ async function walkUntil(page, done, budget) {
   });
 
   await step('entering rolls a plan that ends at the stairs', async () => {
-    await g.evaluate(() => SS.Dungeon.begin(SS.Content.list('dungeons')[0]));
+    await g.evaluate(() => SS.Dungeon.begin(SS.Content.list('dungeons').find(d => d.origin !== 'auto')));
     await g.waitForTimeout(300);
     await clearModal(g);
     const r = await g.evaluate(() => {
@@ -306,7 +311,7 @@ async function walkUntil(page, done, budget) {
         floor: run.floor, walked: run.walked,
         kinds: run.plan.map(s => s.kind),
         ats: run.plan.map(s => s.at),
-        len: SS.Content.list('dungeons')[0].floors[0].lengthMeters
+        len: SS.Content.list('dungeons').find(d => d.origin !== 'auto').floors[0].lengthMeters
       };
     });
     if (!r) throw new Error('no run started');
@@ -373,13 +378,13 @@ async function walkUntil(page, done, budget) {
     await g.waitForTimeout(300);
     const paused = await g.evaluate(() => ({
       active: !!SS.Dungeon.current(),
-      held: !!SS.Dungeon.pausedFor(SS.Content.list('dungeons')[0].dungeonId),
+      held: !!SS.Dungeon.pausedFor(SS.Content.list('dungeons').find(d => d.origin !== 'auto').dungeonId),
       barHidden: document.querySelector('#dungeonBar').classList.contains('hidden')
     }));
     if (paused.active) throw new Error('still inside after stepping out');
     if (!paused.held) throw new Error('the run was thrown away, not held');
     if (!paused.barHidden) throw new Error('the bar stayed up');
-    await g.evaluate(() => SS.Dungeon.resume(SS.Content.list('dungeons')[0]));
+    await g.evaluate(() => SS.Dungeon.resume(SS.Content.list('dungeons').find(d => d.origin !== 'auto')));
     await g.waitForTimeout(250);
     const back = await g.evaluate(() => {
       const r = SS.Dungeon.current(); return r && { walked: Math.round(r.walked), si: r.stopIndex };
@@ -414,7 +419,7 @@ async function walkUntil(page, done, budget) {
     await clearModal(g);
     const r = await g.evaluate(() => {
       const run = SS.Dungeon.current();
-      const d = SS.Content.list('dungeons')[0];
+      const d = SS.Content.list('dungeons').find(d => d.origin !== 'auto');
       return run && {
         floor: run.floor, walked: Math.round(run.walked), si: run.stopIndex,
         kinds: run.plan.map(s => s.kind),
@@ -437,7 +442,7 @@ async function walkUntil(page, done, budget) {
     if (!done) throw new Error('never reached the bottom');
     await clearModal(g);
     const r = await g.evaluate(() => {
-      const d = SS.Content.list('dungeons')[0];
+      const d = SS.Content.list('dungeons').find(d => d.origin !== 'auto');
       const slot = SS.Store.get('dungeon_runs', {})[SS.Game.ch.characterId] || {};
       const st = (slot.state || {})[d.dungeonId];
       return {
@@ -459,7 +464,12 @@ async function walkUntil(page, done, budget) {
   await step('a dungeon with no floors is refused rather than crashing', async () => {
     const r = await g.evaluate(() => {
       const z = SS.Game.zone;
-      const d = SS.Content.blankDungeon(z.centerLatitude, z.centerLongitude, z.zoneId);
+      // On the player, not on the zone centre. A zone is a 500 m grid cell now,
+      // so its centre is a grid line up to 350 m away — placing a 60x40 m
+      // footprint there and then asserting you are standing in it tests the
+      // grid's arithmetic rather than the dungeon.
+      const p = SS.Loc.last;
+      const d = SS.Content.blankDungeon(p.latitude, p.longitude, z.zoneId);
       d.name = 'Empty'; d.floors = [];
       SS.Content.save('dungeons', d);
       SS.Game.drawDungeons();

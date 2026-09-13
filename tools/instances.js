@@ -426,8 +426,13 @@ const STAND_BY = (tx, ty, back) => {
     return '6 m walked = ' + one.moved.toFixed(1) + ' m at pace 1, 4 m = ' + two.toFixed(1) + ' m at pace 2';
   });
 
+  await parkClear(g);
   await step('walls stop you, and the walk is not refunded', async () => {
+    // A step that starts mid-fight proves nothing: advance() refuses to move
+    // or to count the metres while Combat is up, so the wall would look like
+    // it worked for the wrong reason. parkClear above ends any stray fight.
     const r = await g.evaluate(() => {
+      if (SS.Game.inCombat) return { blocked: null, busy: true };
       const run = SS.Instance.current(), C = SS.Content;
       run.pos.x = run.plan.width / 2; run.pos.y = run.plan.height / 2;
       // Put the player against the west wall and face straight into it. On an
@@ -446,6 +451,7 @@ const STAND_BY = (tx, ty, back) => {
         inside: C.walkable(now.plan, now.pos.x, now.pos.y)
       };
     });
+    if (r.busy) throw new Error('a fight was still running, so the wall was never tested');
     if (r.blocked == null) return 'no wall within reach of this entrance';
     if (r.moved > 40) throw new Error('walked through a wall: moved ' + r.moved.toFixed(1) + ' m');
     if (!r.inside) throw new Error('ended up inside a wall');

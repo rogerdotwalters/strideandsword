@@ -111,11 +111,22 @@ const DB = {
    * locations, dungeons and instances land around wherever you actually are
    * rather than in a car park in Chicago.
    */
-  rehomeSeed(zone) {
+  rehomeSeed(zone, at) {
     if (!zone || Store.get("seed_rehomed", null)) return 0;
     const anchor = this.anchorOfSeed();
     if (!anchor) return 0;
-    const dLat = zone.centerLatitude - anchor.lat, dLng = zone.centerLongitude - anchor.lng;
+
+    /* Shift relative to where the player actually is, not the zone's centre.
+       On a grid those are different things — a chunk's centre is a grid line
+       and you can be 250 m from it — and the samples are only useful if they
+       land somewhere you would plausibly walk. */
+    const here = at && isFinite(at.latitude)
+      ? at : { latitude: zone.centerLatitude, longitude: zone.centerLongitude };
+    const dLat = here.latitude - anchor.lat, dLng = here.longitude - anchor.lng;
+
+    /* And never underfoot. A sample landing 30 m away opens its own dialog the
+       moment the game starts, which is not a welcome. */
+    const MIN_M = 90, PUSH_M = 130;
     let moved = 0;
     [["locations", "locationId"], ["dungeons", "dungeonId"], ["instances", "instanceId"]]
       .forEach(([table, idKey]) => {
@@ -123,6 +134,12 @@ const DB = {
         rows.forEach(r => {
           if (!/^(loc|dgn|inst)_seed_/.test(r[idKey] || "")) return;
           r.latitude += dLat; r.longitude += dLng;
+          const d = haversine(here.latitude, here.longitude, r.latitude, r.longitude);
+          if (d < MIN_M) {
+            const bearing = (moved * 67) % 360;   // fan them out rather than stack
+            const p = projectPoint(here.latitude, here.longitude, PUSH_M, bearing);
+            r.latitude = p.latitude; r.longitude = p.longitude;
+          }
           r.zoneId = zone.zoneId;
           moved++;
         });

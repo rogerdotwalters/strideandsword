@@ -101,9 +101,25 @@ const Me = {
   /* ------------------------------------------------------------------ zones
      Zones live in the game's own storage, so a zone anchored while playing
      shows up here and vice versa. */
+  /**
+   * The zones you can author in — hand-made ones only.
+   *
+   * The world is generated on a 500 m grid and every cell you walk through
+   * becomes a zone row of its own, so without this filter the picker fills up
+   * with "Chunk 9259,-14423" after one walk and whichever of them sorted first
+   * becomes the editor's idea of where you are. A chunk has nothing to author:
+   * its sites are procedural and it is thrown away again when it ages out.
+   */
   zones() {
     const z = Store.get(K.zones, {}) || {};
-    return Object.values(z).sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+    return Object.values(z)
+      .filter(x => x.kind !== "chunk")
+      .sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+  },
+
+  /** Including the generated ones — for counting, not for editing. */
+  allZones() {
+    return Object.values(Store.get(K.zones, {}) || {});
   },
   saveZone(z) {
     z.lastModified = Date.now();
@@ -162,7 +178,10 @@ const Me = {
     this.map = L.map("map", { zoomControl: true, maxZoom: 24, minZoom: 3, zoomSnap: 0.5 })
       .setView(start, this.zoomOf("street"));
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 24, maxNativeZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+      maxZoom: 24, maxNativeZoom: 19, keepBuffer: 3,
+      updateWhenIdle: true, updateWhenZooming: false,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" ' +
+                   'target="_blank" rel="noopener">OpenStreetMap</a> contributors'
     }).addTo(this.map);
     this.layer = L.layerGroup().addTo(this.map);
     this.zoneLayer = L.layerGroup().addTo(this.map);
@@ -585,8 +604,37 @@ const Me = {
   },
 
   /* ------------------------------------------------------------------ search
-     Nominatim is OSM's own geocoder. One request per Enter press, never
-     while typing, which keeps well inside its usage policy. */
+
+     Nominatim is OSM's own geocoder, and the strictest of the three services
+     this project touches: **at most one request per second**, no autocomplete,
+     no bulk, and cache what comes back.
+
+       https://operations.osmfoundation.org/policies/nominatim/
+
+     One request per Enter press, never while typing, was already most of that.
+     The rest is here: a hard floor between requests whatever the user does to
+     the button, and answers remembered so searching the same place twice costs
+     nothing. */
+  SEARCH_GAP_MS: 1100,
+  SEARCH_CACHE_KEY: "nominatim_cache",
+  _searchAt: 0,
+  _searching: false,
+
+  searchCache() { return Store.get(this.SEARCH_CACHE_KEY, {}) || {}; },
+  rememberSearch(q, hit) {
+    Store.patch(this.SEARCH_CACHE_KEY, (all) => {
+      all[q.toLowerCase()] = hit;
+      // Keep it small; this is a convenience, not a database.
+      const keys = Object.keys(all);
+      if (keys.length > 40) delete all[keys[0]];
+    });
+  },
+
+  goToHit(hit, q) {
+    this.map.setView([+hit.lat, +hit.lon], 18);
+    this.toast("Found " + (hit.display_name || q).split(",").slice(0, 2).join(", "), "good", 3600);
+  },
+
   async search() {
     const q = $("#meSearch").value.trim();
     if (!q) return;
@@ -596,17 +644,38 @@ const Me = {
       this.toast("Jumped to " + (+coords[1]).toFixed(5) + ", " + (+coords[2]).toFixed(5));
       return;
     }
+
+    const remembered = this.searchCache()[q.toLowerCase()];
+    if (remembered) { this.goToHit(remembered, q); return; }
+
+    if (this._searching) return;                       // one at a time
+    const wait = this.SEARCH_GAP_MS - (Date.now() - this._searchAt);
+    if (wait > 0) {
+      this.toast("One search a second, please — Nominatim's rule, not mine.", "info", 1800);
+      return;
+    }
+
+    this._searching = true;
     this.toast("Searching…");
     try {
       const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q);
       const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      this._searchAt = Date.now();
+      if (res.status === 429) {
+        this.toast("The geocoder asked us to slow down. Try again in a minute.", "bad", 5000);
+        this._searchAt = Date.now() + 60000;           // sit out a minute
+        return;
+      }
       if (!res.ok) throw new Error("HTTP " + res.status);
       const hits = await res.json();
       if (!hits.length) { this.toast("Nothing found for that.", "bad"); return; }
-      this.map.setView([+hits[0].lat, +hits[0].lon], 18);
-      this.toast("Found " + (hits[0].display_name || q).split(",").slice(0, 2).join(", "), "good", 3600);
+      this.rememberSearch(q, { lat: hits[0].lat, lon: hits[0].lon, display_name: hits[0].display_name });
+      this.goToHit(hits[0], q);
     } catch (e) {
+      this._searchAt = Date.now();
       this.toast("Search is unreachable — paste coordinates as \"lat, lng\" instead.", "bad", 5000);
+    } finally {
+      this._searching = false;
     }
   },
 
@@ -631,6 +700,9 @@ const Me = {
       "<span><b>" + n + "</b> locations in total</span>" +
       "<span><b>" + s.spawns + "</b> spawn tables</span>" +
       "<span><b>" + this.zones().length + "</b> zones</span>" +
+      (this.allZones().length > this.zones().length
+        ? "<span><b>" + (this.allZones().length - this.zones().length) +
+          "</b> generated chunks</span>" : "") +
       '<span class="spacer"></span>' +
       "<span>" + (Store.isDurable
         ? "localStorage · " + (Store.usageBytes() / 1024).toFixed(1) + " KB"

@@ -268,6 +268,27 @@ const Atlas = (function () {
       return row;
     },
 
+    /**
+     * Footpaths and tracks in range, nearest first.
+     *
+     * Trails are already here — ROAD_TYPES has fetched footway, path, steps,
+     * cycleway and track since the first survey, and each is an ordinary
+     * street row. So weighting instances toward trails costs no new fetching;
+     * it just reads the table that was already being filled.
+     */
+    TRAIL_KINDS: { footway: 1, path: 1, cycleway: 1, track: 1, steps: 1, bridleway: 1 },
+
+    nearTrails(lat, lng, maxM) {
+      const t = table("streets");
+      const out = [];
+      for (const k in t) {
+        if (!this.TRAIL_KINDS[t[k].kind]) continue;
+        const d = haversine(lat, lng, t[k].latitude, t[k].longitude);
+        if (d <= (maxM || 400)) out.push({ row: t[k], d });
+      }
+      return out.sort((a, b) => a.d - b.d);
+    },
+
     /** Recorded places within `maxM` metres of a point, nearest first. */
     nearPlaces(lat, lng, maxM) {
       const t = table("places");
@@ -385,12 +406,110 @@ const OSM = {
 
   cacheKey(zone) { return "osm_cache_" + zone.zoneId; },
 
+  /* ---------------------------------------------------------------- policy
+
+     The Overpass API is free, donated infrastructure with a published usage
+     policy, and this is a game that surveys the ground as you walk — the exact
+     shape of client that abuses it if left alone. These numbers are that
+     policy written down where the code can see it.
+
+       https://wiki.openstreetmap.org/wiki/Overpass_API#Limitations
+
+     What it asks for, and what answers it here:
+
+       one query at a time     GATE below: every request in the app is chained
+                               through one promise, so two callers cannot
+                               overlap however they were triggered
+       leave gaps              MIN_GAP_MS between requests, and a per-minute
+                               ceiling on top of it
+       back off when told      429 / 503 / 504 set a cool-off, honouring
+                               Retry-After when it is sent. A 429 must NOT be
+                               retried on a different public instance — that
+                               moves the load rather than reducing it
+       cache, don't re-ask     Chunks caches every survey; see cacheFor()
+       identify yourself       a comment in the query text, since a browser
+                               cannot set User-Agent
+
+     The cool-off is persisted, so reloading the page is not a way to escape
+     it — which is the whole point of having one. */
+  MIN_GAP_MS: 1500,
+  MAX_PER_MINUTE: 12,
+  DEFAULT_COOL_OFF_MS: 90000,
+  MAX_COOL_OFF_MS: 30 * 60000,
+  COOL_KEY: "osm_cool_off",
+
+  /* One request at a time, app-wide. `_tail` is the promise the next caller
+     waits on, so this is a lock rather than a rate limiter: it holds whether
+     the callers are Chunks.sync, the dev panel, or a menu action. */
+  _tail: null,
+  _lastAt: 0,
+  _recent: [],
+  _endpoint: 0,
+  stats: { requests: 0, ok: 0, failed: 0, deferred: 0, coolOffs: 0, bytes: 0 },
+
+  coolOffUntil() { return +Store.get(this.COOL_KEY, 0) || 0; },
+  coolOffMs(now) { return Math.max(0, this.coolOffUntil() - (now || Date.now())); },
+  coolOff(ms, why) {
+    const until = Date.now() + Math.min(this.MAX_COOL_OFF_MS, Math.max(1000, ms));
+    if (until <= this.coolOffUntil()) return;
+    Store.set(this.COOL_KEY, until);
+    this.stats.coolOffs++;
+    console.warn("[OSM] backing off for " + Math.round((until - Date.now()) / 1000) +
+                 "s" + (why ? " — " + why : ""));
+  },
+  clearCoolOff() { Store.remove(this.COOL_KEY); },
+
+  /**
+   * Retry-After is either seconds or an HTTP date. Both are worth reading.
+   *
+   * Often it is not readable at all: it is not a CORS-safelisted response
+   * header, so unless the server sends Access-Control-Expose-Headers the
+   * browser hides it from us. That is why a 429 falls back to a fixed
+   * DEFAULT_COOL_OFF_MS rather than treating "no header" as "no wait".
+   */
+  retryAfterMs(res) {
+    const h = res && res.headers && res.headers.get && res.headers.get("Retry-After");
+    if (!h) return 0;
+    const secs = parseFloat(h);
+    if (isFinite(secs)) return Math.max(0, secs * 1000);
+    const when = Date.parse(h);
+    return isFinite(when) ? Math.max(0, when - Date.now()) : 0;
+  },
+
+  /** Have we made too many requests in the last minute? */
+  overMinuteCap(now) {
+    this._recent = this._recent.filter(t => now - t < 60000);
+    return this._recent.length >= this.MAX_PER_MINUTE;
+  },
+
+  /**
+   * Run `job` with no other Overpass request in flight and a decent gap since
+   * the last one. Everything that talks to Overpass goes through here.
+   */
+  async gate(job) {
+    const prev = this._tail || Promise.resolve();
+    let release;
+    this._tail = new Promise(r => { release = r; });
+    try { await prev; } catch (e) { /* a previous failure is not ours */ }
+    try {
+      const wait = this.MIN_GAP_MS - (Date.now() - this._lastAt);
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      return await job();
+    } finally {
+      this._lastAt = Date.now();
+      release();
+    }
+  },
+
   query(lat, lng, radius) {
     const at = "(around:" + radius + "," + lat + "," + lng + ");";
     // `nw` rather than `nwr`: relations give multipolygons, and a park with a
     // hole in it is not worth the geometry code. A relation-mapped park is
     // usually also tagged on its outer way, so little is lost.
-    return "[out:json][timeout:30];(" +
+    // The comment is the only way a browser client can identify itself —
+    // fetch() refuses to set User-Agent — and Overpass keeps it in its logs.
+    return "// stride-and-sword (walking game, one chunk per query)\n" +
+      "[out:json][timeout:30];(" +
       'way["building"]' + at +
       'way["highway"~"^(' + this.ROAD_TYPES + ')$"]' + at +
       'nw["leisure"~"^(' + this.PLACE_LEISURE + ')$"]' + at +
@@ -398,6 +517,45 @@ const OSM = {
       'nw["shop"~"^(' + this.PLACE_SHOP + ')$"]' + at +
       'nw["amenity"~"^(' + this.PLACE_AMENITY + ')$"]' + at +
       ");out geom;";
+  },
+
+  /* The only tags anything downstream ever reads. Everything else Overpass
+     sends — addresses, heights, operators, source notes, opening hours — is
+     dropped before the response is cached. */
+  TAG_KEEP: ["building", "highway", "name", "amenity", "shop", "leisure",
+             "landuse", "tourism", "public_transport", "man_made"],
+
+  /**
+   * Shrink a response to what we actually use, without changing its shape.
+   *
+   * The best way to be gentle with a donated API is to not ask it twice, and
+   * the thing stopping us caching more was size: a raw response is mostly tags
+   * we never read and coordinates at nanometre precision. Pruning is measured
+   * at roughly half on the test town and better on real data, which is that
+   * many more chunks kept for the same byte budget.
+   *
+   * It stays a list of `{type, id, tags, geometry}` on purpose, so `digest()`
+   * and everything reading the cache carry on unchanged and an older cache
+   * entry still works.
+   */
+  prune(elements) {
+    const r6 = n => Math.round(n * 1e6) / 1e6;      // ~0.1 m, far finer than GPS
+    const out = [];
+    (elements || []).forEach(el => {
+      const tags = {};
+      let any = false;
+      this.TAG_KEEP.forEach(k => {
+        if (el.tags && el.tags[k] != null) { tags[k] = el.tags[k]; any = true; }
+      });
+      if (!any) return;                              // nothing we could use it for
+      const kept = { type: el.type, id: el.id, tags };
+      if (isFinite(el.lat) && isFinite(el.lon)) { kept.lat = r6(el.lat); kept.lon = r6(el.lon); }
+      if (el.geometry && el.geometry.length) {
+        kept.geometry = el.geometry.map(p => ({ lat: r6(p.lat), lon: r6(p.lon) }));
+      }
+      out.push(kept);
+    });
+    return out;
   },
 
   /** Metric-ish area of a small polygon, via the shoelace formula. */
@@ -426,26 +584,90 @@ const OSM = {
     return d;
   },
 
+  /**
+   * One survey. Queued behind every other one, spaced, and willing to be told
+   * to go away.
+   *
+   * The failure cases are deliberately not all the same shape:
+   *
+   *   cooling off / over the cap  we never touch the network. `deferred` says
+   *                               so, and `retryInMs` says when to come back,
+   *                               so the caller can wait rather than spin.
+   *   429 / 503 / 504             the service is asking us to stop. Cool off
+   *                               and return. Trying the next endpoint here
+   *                               would just push the same load onto another
+   *                               volunteer's server.
+   *   400 / 500 / a dead socket   this endpoint is broken, not overloaded.
+   *                               Try the next one, still spaced by the gate.
+   */
   async fetchAround(lat, lng, radius) {
     const body = "data=" + encodeURIComponent(this.query(lat, lng, radius));
-    for (const url of this.ENDPOINTS) {
-      try {
-        const ctl = new AbortController();
-        const timer = setTimeout(() => ctl.abort(), 25000);
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body, signal: ctl.signal
-        });
-        clearTimeout(timer);
-        if (!res.ok) continue;
-        const json = await res.json();
-        if (json && json.elements) return { success: true, elements: json.elements, endpoint: url };
-      } catch (e) {
-        console.warn("[OSM] " + url + " failed:", e && e.message);
-      }
+
+    const cool = this.coolOffMs();
+    if (cool > 0) {
+      this.stats.deferred++;
+      return { success: false, deferred: true, retryInMs: cool,
+               message: "Waiting " + Math.ceil(cool / 1000) + "s before asking the map service again." };
     }
-    return { success: false, message: "No Overpass endpoint answered." };
+    if (this.overMinuteCap(Date.now())) {
+      this.stats.deferred++;
+      return { success: false, deferred: true, retryInMs: 20000,
+               message: "Holding off — " + this.MAX_PER_MINUTE + " map queries in the last minute." };
+    }
+
+    let lastMessage = "No Overpass endpoint answered.";
+    for (let attempt = 0; attempt < this.ENDPOINTS.length; attempt++) {
+      // Stay on whichever endpoint last worked rather than always hammering
+      // the first one in the list.
+      const url = this.ENDPOINTS[(this._endpoint + attempt) % this.ENDPOINTS.length];
+
+      const out = await this.gate(async () => {
+        this.stats.requests++;
+        this._recent.push(Date.now());
+        try {
+          const ctl = new AbortController();
+          const timer = setTimeout(() => ctl.abort(), 25000);
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body, signal: ctl.signal
+          });
+          clearTimeout(timer);
+
+          if (res.status === 429 || res.status === 503 || res.status === 504) {
+            this.stats.failed++;
+            this.coolOff(this.retryAfterMs(res) || this.DEFAULT_COOL_OFF_MS,
+                         "HTTP " + res.status + " from " + url);
+            return { stop: true, result: { success: false, deferred: true,
+              retryInMs: this.coolOffMs(),
+              message: "The map service asked us to slow down." } };
+          }
+          if (!res.ok) { this.stats.failed++; return { next: true, message: "HTTP " + res.status }; }
+
+          const text = await res.text();
+          this.stats.bytes += text.length;
+          const json = JSON.parse(text);
+          if (!json || !json.elements) { this.stats.failed++; return { next: true, message: "no elements" }; }
+
+          this.stats.ok++;
+          this._endpoint = this.ENDPOINTS.indexOf(url);
+          return { stop: true, result: { success: true, elements: json.elements, endpoint: url } };
+        } catch (e) {
+          this.stats.failed++;
+          return { next: true, message: (e && e.message) || "request failed" };
+        }
+      });
+
+      if (out.stop) return out.result;
+      lastMessage = url.replace(/^https:\/\//, "") + ": " + out.message;
+      console.warn("[OSM] " + lastMessage);
+    }
+
+    /* Every endpoint refused. That is not a rate-limit, but going straight
+       round again would still be three more queries a few seconds later, so
+       the caller is asked to wait too. */
+    this.coolOff(this.DEFAULT_COOL_OFF_MS, "no endpoint answered");
+    return { success: false, retryInMs: this.coolOffMs(), message: lastMessage };
   },
 
   /**

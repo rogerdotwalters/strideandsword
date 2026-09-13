@@ -652,3 +652,13 @@ input[type=range]{accent-color:var(--gold);height:22px}
   border-style:dashed;
   box-shadow:0 0 0 3px rgba(224,163,62,.10),0 3px 12px rgba(0,0,0,.6);
 }
+
+/* Out of sight. You can tell something is there without being told what it is
+   — the generated world is far bigger than the visible one, and without this
+   every chunk you had ever walked through would be on screen at once. */
+.pin.unknown{
+  width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(18,23,34,.72);border:1px dashed var(--line-2,#39455d);
+  color:var(--ink-3,#8a93a6);font-size:13px;font-weight:700;
+  box-shadow:0 2px 8px rgba(0,0,0,.5);
+}

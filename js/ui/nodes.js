@@ -111,7 +111,10 @@ Object.assign(Game, {
     if (!this.zone) return;
     const made = Zones.respawnCleared(this.zone, this.ch.level);
     if (made > 0) {
-      this.nodes = Zones.nodesIn(this.zone.zoneId);
+      // Everything in range, not just this cell's — taking the zone's own list
+      // here would wipe the neighbouring chunks off the map as a side effect of
+      // clearing a site.
+      this.nodes = this.visibleNodes();
       this.drawNodes();
       UI.toast(made + " new site" + (made > 1 ? "s have" : " has") + " appeared nearby.", "info", 3600);
     }
