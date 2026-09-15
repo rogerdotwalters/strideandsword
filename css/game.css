@@ -196,8 +196,50 @@ h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:.2px}
   box-shadow:var(--shadow);padding:0;position:relative;
 }
 .iconBtn:hover{background:var(--bg-4)}
+.iconBtn.on{border-color:var(--gold-dim);color:var(--gold);background:rgba(60,45,16,.9)}
 .iconBtn .dot{position:absolute;top:1px;right:1px;width:9px;height:9px;border-radius:50%;background:var(--gold);border:2px solid var(--bg-2)}
 .spacer{flex:1}
+
+/* ---------- the sidebar: what you can walk up to ----------
+   Proximity no longer opens anything by itself, so this is the way in. On a
+   wide screen it sits beside the map; on a phone it slides over it, because
+   238px of a 390px screen is not "beside". */
+.siteList{
+  position:absolute;left:10px;top:54px;z-index:650;width:250px;
+  max-height:calc(100vh - 300px);
+  display:flex;flex-direction:column;
+  background:rgba(18,23,34,.97);border:1px solid var(--line-2);
+  border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;
+}
+.siteList.hidden{display:none}
+.slHead{
+  display:flex;align-items:center;gap:6px;padding:9px 11px;
+  border-bottom:1px solid var(--line);font-size:12px;
+}
+.slHead b{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:var(--ink-3)}
+.slHead .btn{padding:3px 8px;font-size:11px}
+.slBody{overflow-y:auto;padding:5px}
+.slEmpty{padding:14px 12px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.slRow{
+  width:100%;display:flex;align-items:center;gap:9px;text-align:left;
+  padding:8px 9px;border:1px solid transparent;border-radius:var(--r);
+  background:none;color:var(--ink-1);cursor:pointer;font:inherit;
+}
+.slRow + .slRow{margin-top:2px}
+.slRow:hover{background:var(--bg-4)}
+.slIco{font-size:17px;width:22px;text-align:center;flex:none}
+.slText{flex:1;min-width:0;line-height:1.3}
+.slText b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slNote{font-size:10.5px;color:var(--ink-3)}
+.slDist{font-size:11px;font-family:var(--mono);color:var(--ink-3);flex:none}
+/* In range: the only state the list actually asserts. */
+.slRow.near{border-color:rgba(84,179,122,.45);background:rgba(84,179,122,.07)}
+.slRow.near .slDist{color:var(--ok)}
+/* Out of range. Still tappable — its panel tells you how far, which is more
+   use than a dead row. */
+.slRow.far{opacity:.45}
+.slRow.far:hover{opacity:.75}
+.slRow.done .slText b{text-decoration:line-through;color:var(--ink-3)}
 
 .bars{
   position:absolute;left:10px;right:10px;bottom:10px;z-index:600;
@@ -440,6 +482,13 @@ body.inInstance .zoomModes{display:none}
   background:linear-gradient(90deg,#8a6524,#e0a33e);transition:width .35s ease}
 .dungeonBar .dvFoot{display:flex;justify-content:space-between;font-size:11px;
   color:var(--ink-3);font-family:var(--mono)}
+/* Wandering away from the door. The border change is the ambient warning; the
+   line below it is the count. */
+.dungeonBar.straying{border-color:var(--warn)}
+.dungeonBar .dvLeash{
+  font-size:11px;color:var(--warn);font-family:var(--mono);
+  border-top:1px solid var(--line);padding-top:6px;
+}
 
 .pinWrap{background:none !important;border:0 !important}
 .pin{
@@ -639,6 +688,9 @@ input[type=range]{accent-color:var(--gold);height:22px}
   #devPanel{width:210px;left:auto;right:8px}
   .cbEnemies{max-height:32vh}
   .charChip .who b{max-width:88px}
+  /* The sidebar becomes a panel over the map, and a wide one: at this width a
+     250px column beside a 390px map leaves neither any room. */
+  .siteList{left:8px;right:8px;width:auto;max-height:52vh}
 }
 
 /* Location art — a PNG lying on the map under its pin. `rotate` is set on the
@@ -661,4 +713,79 @@ input[type=range]{accent-color:var(--gold);height:22px}
   background:rgba(18,23,34,.72);border:1px dashed var(--line-2,#39455d);
   color:var(--ink-3,#8a93a6);font-size:13px;font-weight:700;
   box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+
+/* ---------- quests ----------
+   A quest node is its own kind of thing on the map: not a site the world
+   generated, not a door, but the one place you are currently supposed to be. */
+.questPin{
+  width:36px;height:36px;border-radius:9px;display:grid;place-items:center;
+  font-size:18px;border:2px solid #a76fd4;background:#241a30;
+  box-shadow:0 3px 12px rgba(0,0,0,.6);
+}
+.questPin.inrange{
+  border-color:var(--gold);
+  box-shadow:0 0 0 4px rgba(224,163,62,.22),0 3px 12px rgba(0,0,0,.6);
+}
+
+/* Dialogue. A conversation wants to read like one, so the line gets room and
+   the speaker sits above it rather than in front of it. */
+.dlgWho{
+  font-size:11px;text-transform:uppercase;letter-spacing:.9px;
+  color:var(--gold);font-weight:700;margin-bottom:6px;
+}
+.dlgLine{margin:0;font-size:14.5px;line-height:1.65;color:var(--ink-1)}
+
+/* The quest log. */
+.qlRow{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:9px;background:var(--bg-2)}
+.qlHead{display:flex;align-items:baseline;gap:8px}
+.qlHead b{flex:1;font-size:13.5px}
+.qlRow p{margin:4px 0 0}
+.qlNow{margin-top:7px;font-size:12.5px;color:var(--ink-2)}
+
+/* ---------- naming your places ----------
+   One slot at a time. A list of eight forms is one nobody finishes; a list of
+   one with Next under it is one they do. */
+.hauntPick{min-width:min(420px,78vw)}
+.hpStep{display:flex;flex-direction:column;gap:2px;margin-bottom:12px}
+.hpStep b{font-size:15px}
+.hpHave{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;
+  border:1px solid var(--gold-dim);border-radius:var(--r);background:rgba(60,45,16,.35);
+}
+.hpHave > div{flex:1;min-width:0;line-height:1.35}
+.hpIco{font-size:20px;flex:none}
+.hpList{max-height:min(38vh,300px);overflow-y:auto;margin-bottom:10px;
+  border:1px solid var(--line);border-radius:var(--r)}
+.hpRow{
+  width:100%;display:flex;align-items:center;gap:10px;text-align:left;
+  padding:9px 11px;background:none;border:0;border-bottom:1px solid var(--line);
+  color:var(--ink-1);font:inherit;cursor:pointer;
+}
+.hpRow:last-child{border-bottom:0}
+.hpRow:hover{background:var(--bg-3)}
+.hpText{flex:1;min-width:0;line-height:1.3}
+.hpText b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hpText span{display:block}
+.hpPin{margin-bottom:12px}
+.hpRole{border-top:1px solid var(--line);padding-top:12px}
+.hpBar{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.hpBar .tiny{flex:1;text-align:center}
+.qlDone{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.qlPast{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px}
+.qlPast .nm{flex:1;min-width:0;color:var(--ink-2)}
+
+/* ---------- the living world ----------
+   Round, so it reads as something alive rather than a place on the map: every
+   other pin here is a square-ish badge. */
+.denizenPin{
+  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+  font-size:16px;border:2px solid var(--line-2);background:rgba(26,33,48,.96);
+  box-shadow:0 3px 10px rgba(0,0,0,.6);transition:transform .25s ease;
+}
+.denizenPin.creature{border-color:#8a6524}
+.denizenPin.character{border-color:var(--mana)}
+.denizenPin.inrange{
+  border-color:var(--ok);transform:scale(1.12);
+  box-shadow:0 0 0 4px rgba(84,179,122,.18),0 3px 10px rgba(0,0,0,.6);
 }

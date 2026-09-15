@@ -184,14 +184,23 @@ const Loc = {
     if (!force && this.last && nowTs() - this.lastAccepted < s.gpsUpdateInterval) return;
     // Ignore jitter smaller than the reported accuracy — stops the walk
     // counter inflating while you sit still.
+    let walked = 0;
     if (this.last) {
       const moved = haversine(this.last.latitude, this.last.longitude, fix.latitude, fix.longitude);
       const noiseFloor = fix.sim ? 0 : Math.max(4, Math.min(25, (fix.accuracy || 15) * 0.6));
-      if (moved > noiseFloor) Walk.add(moved);
+      if (moved > noiseFloor) walked = moved;
       else if (!force) { this.last = fix; this.lastAccepted = nowTs(); this._emit(); return; }
     }
+    /* Move first, then credit the walk.
+       These used to be the other way round, which meant everything downstream
+       of Walk.add — the dungeon floor, the XP, anything asking "where am I?" —
+       was answered with the position you had just left. Harmless while nothing
+       consulted it; wrong the moment the dungeon leash did, because the metres
+       that carried you out of a dungeon were still being measured from inside
+       it. */
     this.last = fix;
     this.lastAccepted = nowTs();
+    if (walked) Walk.add(walked);
     this._emit();
   },
 

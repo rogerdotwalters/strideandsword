@@ -461,8 +461,115 @@ async function walkUntil(page, done, budget) {
     return 'sealed: "' + r.gate.why + '"';
   });
 
+  /* ====================================================== THE LEASH ======
+     A dungeon is somewhere you are *inside*. Walking across town while the
+     run counts your metres along its floor reads as a bug, so the run is tied
+     to its own door. */
+  console.log('\n===== THE LEASH =====');
+
+  await step('a fresh run is anchored on the door it went in by', async () => {
+    const r = await g.evaluate(() => {
+      const p = SS.Loc.last;
+      const d = SS.Content.blankDungeon(p.latitude, p.longitude, SS.Game.zone.zoneId);
+      d.name = 'The Leash'; d.entryRange = 40; d.minLevel = 1; d.respawnMinutes = 0;
+      d.floors = [Object.assign(SS.Content.blankFloor(1), { lengthMeters: 400, encounters: 0, chests: 0 })];
+      SS.Content.save('dungeons', d);
+      SS.Dungeon.begin(d);
+      const run = SS.Dungeon.current();
+      return { id: d.dungeonId, anchored: !!(run && run.anchor),
+               onDoor: run && Math.abs(run.anchor.latitude - d.latitude) < 1e-9,
+               away: Math.round(SS.Dungeon.strayM(run)),
+               limit: SS.Dungeon.leashM(d) };
+    });
+    await clearModal(g);
+    if (!r.anchored) throw new Error('the run kept no anchor');
+    if (!r.onDoor) throw new Error('anchored somewhere other than the door');
+    if (r.away > 5) throw new Error('standing on the door it reads ' + r.away + ' m away');
+    return 'anchored on the door, ' + r.limit + ' m of rope';
+  });
+
+  await step('the bar warns before it does anything about it', async () => {
+    const r = await g.evaluate(() => {
+      const d = SS.Content.list('dungeons').find(x => x.name === 'The Leash');
+      const limit = SS.Dungeon.leashM(d);
+      // 80% of the way out: inside the limit, past the warning line.
+      const p = SS.projectPoint
+        ? SS.projectPoint(d.latitude, d.longitude, limit * 0.8, 90)
+        : null;
+      SS.Loc.simulateTo(p.latitude, p.longitude);
+      const st = SS.Dungeon.leashState();
+      return {
+        away: Math.round(st.away), limit, warn: st.warn, past: st.past,
+        stillIn: !!SS.Dungeon.current(),
+        barWarns: document.querySelector('#dungeonBar').classList.contains('straying'),
+        text: (document.querySelector('.dvLeash') || {}).textContent || ''
+      };
+    });
+    if (!r.warn || r.past) throw new Error('at ' + r.away + ' of ' + r.limit + ' m: warn=' + r.warn + ' past=' + r.past);
+    if (!r.stillIn) throw new Error('the warning band ended the run');
+    if (!r.barWarns) throw new Error('the bar said nothing');
+    if (!/m before you step out/.test(r.text)) throw new Error('no countdown: "' + r.text + '"');
+    return r.away + ' of ' + r.limit + ' m — "' + r.text.trim() + '"';
+  });
+
+  await step('past the limit the run is held, not lost', async () => {
+    const r = await g.evaluate(() => {
+      const d = SS.Content.list('dungeons').find(x => x.name === 'The Leash');
+      const run = SS.Dungeon.current();
+      const walkedBefore = Math.round(run.walked);
+      const p = SS.projectPoint(d.latitude, d.longitude, SS.Dungeon.leashM(d) + 40, 90);
+      SS.Loc.simulateTo(p.latitude, p.longitude);
+      const held = SS.Dungeon.pausedFor(d.dungeonId);
+      return {
+        id: d.dungeonId, walkedBefore,
+        active: !!SS.Dungeon.current(),
+        held: !!held, heldAt: held && Math.round(held.walked),
+        barHidden: document.querySelector('#dungeonBar').classList.contains('hidden')
+      };
+    });
+    if (r.active) throw new Error('still inside past the leash');
+    if (!r.held) throw new Error('the run was thrown away rather than held');
+    if (r.heldAt !== r.walkedBefore) throw new Error('it lost progress: ' + r.walkedBefore + ' → ' + r.heldAt);
+    if (!r.barHidden) throw new Error('the bar stayed up');
+    return 'held at ' + r.heldAt + ' m, bar down';
+  });
+
+  await step('walking does not carry you along a floor you have left', async () => {
+    const r = await g.evaluate(() => {
+      const d = SS.Content.list('dungeons').find(x => x.name === 'The Leash');
+      const before = SS.Dungeon.pausedFor(d.dungeonId).walked;
+      SS.Walk.add(80);
+      return { before: Math.round(before),
+               after: Math.round(SS.Dungeon.pausedFor(d.dungeonId).walked) };
+    });
+    if (r.after !== r.before) throw new Error('80 m out of town moved it ' + (r.after - r.before) + ' m along the floor');
+    return 'held at ' + r.after + ' m through 80 m of walking';
+  });
+
+  await step('come back and pick it up where you left it', async () => {
+    const r = await g.evaluate(() => {
+      const d = SS.Content.list('dungeons').find(x => x.name === 'The Leash');
+      SS.Loc.simulateTo(d.latitude, d.longitude);
+      const held = SS.Dungeon.pausedFor(d.dungeonId);
+      SS.Dungeon.resume(d);
+      const run = SS.Dungeon.current();
+      return {
+        resumed: !!run, at: run && Math.round(run.walked), was: Math.round(held.walked),
+        away: run && Math.round(SS.Dungeon.strayM(run)),
+        reanchored: run && Math.abs(run.anchor.latitude - d.latitude) < 1e-9
+      };
+    });
+    if (!r.resumed) throw new Error('could not get back in');
+    if (r.at !== r.was) throw new Error('resumed at ' + r.at + ', left at ' + r.was);
+    if (!r.reanchored) throw new Error('it kept the old anchor');
+    return 'back in at ' + r.at + ' m, ' + r.away + ' m from the door';
+  });
+
   await step('a dungeon with no floors is refused rather than crashing', async () => {
     const r = await g.evaluate(() => {
+      // Put the leash run down first, or canEnter answers "you're already
+      // inside one" and the empty dungeon is never actually tested.
+      SS.Dungeon.abandon(true);
       const z = SS.Game.zone;
       // On the player, not on the zone centre. A zone is a 500 m grid cell now,
       // so its centre is a grid line up to 350 m away — placing a 60x40 m

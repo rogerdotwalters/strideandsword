@@ -23,10 +23,14 @@ const DB = {
     locations: "locations.json",
     dungeons:  "dungeons.json",
     instances: "instances.json",
+    quests:    "quests.json",
     players:   "players.json",
     /* Not a content table — the spawn weights, read straight off DB.raw by
        Placement. Loaded here so it arrives with everything else. */
-    spawnRules: "spawn-rules.json"
+    spawnRules: "spawn-rules.json",
+    /* Also not a content table: hand-drawn scenery, in its own file so it can
+       be edited elsewhere and uploaded whole. See js/world/shapes.js. */
+    shapes:     "shapes.json"
   },
 
   raw: {},              // what the files actually held, after load
@@ -93,15 +97,29 @@ const DB = {
     return made;
   },
 
+  /**
+   * Shapes are their own table with their own key, so they seed on their own
+   * terms — and on the same rule as everything else: a table that has been
+   * written is never overwritten, so a file you emptied stays empty.
+   */
+  seedShapes(force) {
+    const rows = this.raw.shapes;
+    if (typeof Shapes === "undefined" || !Array.isArray(rows)) return 0;
+    if (!force && Shapes.exists()) return 0;
+    Shapes.replaceAll(JSON.parse(JSON.stringify(rows)));
+    return rows.length;
+  },
+
   seedAll(force) {
     const out = {};
     if (this.raw.config && (force || !Store.get(Content.KEYS.config, null))) {
       Content.saveConfig(JSON.parse(JSON.stringify(this.raw.config)));
       out.config = 1;
     }
-    ["items", "monsters", "loot", "spawns", "locations", "dungeons", "instances"]
+    ["items", "monsters", "loot", "spawns", "locations", "dungeons", "instances", "quests"]
       .forEach(n => { out[n] = this.seedTable(n, force); });
     out.players = this.seedPlayers(force);
+    out.shapes = this.seedShapes(force);
     return out;
   },
 
@@ -166,7 +184,7 @@ const DB = {
   /** Hand the whole database back as one JSON blob, for saving to disk. */
   exportAll() {
     const out = { format: "stride-and-sword.db", version: 1, exportedAt: new Date().toISOString() };
-    ["items", "monsters", "loot", "spawns", "locations", "dungeons", "instances"]
+    ["items", "monsters", "loot", "spawns", "locations", "dungeons", "instances", "quests"]
       .forEach(n => { out[n] = Content.list(n); });
     out.config = Content.config();
     return out;

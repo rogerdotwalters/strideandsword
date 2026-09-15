@@ -15,7 +15,8 @@ const Ed = {
     monsters: { col: "name", dir: 1 },
     loot:     { col: "name", dir: 1 },
     items:    { col: "name", dir: 1 },
-    spawns:   { col: "name", dir: 1 }
+    spawns:   { col: "name", dir: 1 },
+    quests:   { col: "name", dir: 1 }
   },
 
   /** True when the window is too narrow for two panes side by side. */
@@ -111,6 +112,7 @@ const Ed = {
       ["loot", "Loot Tables", s.loot],
       ["items", "Items", s.items],
       ["spawns", "Spawns", s.spawns],
+      ["quests", "Quests", Content.list("quests").length],
       ["rarity", "Rarity", null]
     ];
     const host = $("#edTabs");
@@ -134,7 +136,7 @@ const Ed = {
       return;
     }
     const noun = { monsters: "monster", loot: "loot table", items: "item",
-                   spawns: "spawn table" }[this.tab];
+                   spawns: "spawn table", quests: "quest" }[this.tab];
     bar.innerHTML =
       '<input class="input" id="edSearch" placeholder="Search ' + noun + 's…" value="' + esc(this.search) + '">' +
       '<div class="spacer"></div>' +
@@ -231,6 +233,10 @@ const Ed = {
           '<td class="dim" data-l="Contains">' + names + more + "</td></tr>";
       }).join("");
 
+    } else if (this.tab === "quests") {
+      const q = this.questRows(rows);
+      head = q.head; body = q.body;
+
     } else if (this.tab === "spawns") {
       head = this.th("name", "Name") + "<th class='num'>Monsters</th>" +
              "<th class='num'>Pack</th><th>Most likely</th><th>Contains</th>";
@@ -313,7 +319,9 @@ const Ed = {
     this.draft = this.tab === "monsters" ? Content.blankMonster()
                : this.tab === "loot" ? Content.blankLootTable()
                : this.tab === "spawns" ? Content.blankSpawnTable()
+               : this.tab === "quests" ? Quests.blank()
                : Content.blankItem();
+    this.openNode = 0;
     this.selected = null;
     this.isNew = true;
     this.renderList();
@@ -341,6 +349,9 @@ const Ed = {
 
   validate(d) {
     if (!d.name || !d.name.trim()) return "Give it a name.";
+    // A quest knows its own rules — steps, roles, walk distances, boundaries
+    // and any answer pointing at a step that is not there.
+    if (this.tab === "quests") return Quests.validate(d);
     if (this.tab === "monsters") {
       if (+d.levelMin > +d.levelMax) return "Minimum level is above the maximum.";
       if (+d.attackMin > +d.attackMax) return "Minimum attack is above the maximum.";
@@ -444,6 +455,7 @@ const Ed = {
       "<span><b>" + s.items + "</b> items</span>" +
       "<span><b>" + s.spawns + "</b> spawn tables</span>" +
       "<span><b>" + s.locations + "</b> locations</span>" +
+      "<span><b>" + Content.list("quests").length + "</b> quests</span>" +
       '<span class="spacer"></span>' +
       "<span>" + (Store.isDurable ? "localStorage · " + kb + " KB" : "in-memory only — changes will not survive a reload") + "</span>";
   }
@@ -524,13 +536,14 @@ Object.assign(Ed, {
     if (this.tab === "rarity") { host.innerHTML = ""; return; }
     if (!this.draft) {
       const noun = { monsters: "monster", loot: "loot table", items: "item",
-                   spawns: "spawn table" }[this.tab];
+                   spawns: "spawn table", quests: "quest" }[this.tab];
       host.innerHTML = '<div class="emptyForm">Select a ' + noun + " from the list,<br>or create a new one.</div>";
       return;
     }
     if (this.tab === "monsters") this.monsterForm(host);
     else if (this.tab === "loot") this.lootForm(host);
     else if (this.tab === "spawns") this.spawnForm(host);
+    else if (this.tab === "quests") this.questForm(host);
     else this.itemForm(host);
     this.wireActions();
   },

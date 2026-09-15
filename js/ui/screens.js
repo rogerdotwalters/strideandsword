@@ -271,6 +271,18 @@ const Screens = {
           API.request("/character/create", "POST", ch);
           UI.toast(esc(nm) + " steps outside.", "good");
           Game.start(ch);
+          /* Your real places, once per account — as a toast, not a modal.
+             A panel that opens itself over the map seconds after you start is
+             the exact behaviour we spent this build removing everywhere else,
+             and this is not urgent: quests improvise until you get round to it,
+             the menu has the real entry point, and a quest giver says so again
+             when it actually matters. */
+          if (typeof Haunts !== "undefined" && !Haunts.ready()) {
+            setTimeout(() => {
+              UI.toast("Tip: name your real places in the menu — quests will send you to " +
+                       "your own park and shops instead of guessing.", "info", 7000);
+            }, 4000);
+          }
           return;
         }
         state.step++; render();

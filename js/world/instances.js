@@ -510,7 +510,6 @@ const Instance = {
     } else {
       body += '<p class="tiny" style="color:var(--warn);margin:12px 0 0">' + esc(gate.why) + "</p>";
     }
-    UI.modal({ title: cap(kind.label), icon: kind.icon, body, buttons,
-               onClose: () => { Game._pendingInst = null; } });
+    UI.modal({ title: cap(kind.label), icon: kind.icon, body, buttons });
   }
 };

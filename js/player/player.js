@@ -27,6 +27,11 @@ const Characters = {
       characterId: uid("chr"), userId, name,
       class: classKey, race: raceKey,
       level: 1, experience: 0, unspentPoints: 0, gold: 60,
+      /* Quests finished, kept on the character beside experience because it is
+         the same kind of thing: a number that only goes up and says what this
+         character has actually done. The detail — which ones, how many times —
+         lives in quest_runs; this is the headline. */
+      questsCompleted: 0,
       attributes: this.finalAttributes(allocation, raceKey, classKey),
       stats: { hp: 0, maxHp: 0, mana: 0, maxMana: 0, stamina: 0, maxStamina: 0 },
       equipment: [],

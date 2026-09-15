@@ -1,0 +1,112 @@
+[
+  {
+    "questId": "qst_seed_greenwood",
+    "name": "Something in the Greenwood",
+    "summary": "The tanner wants a word, and then she wants you to go and look at something.",
+    "giverLocationId": "",
+    "minLevel": 1,
+    "repeatable": true,
+    "active": true,
+    "notes": "The sample quest. Three steps across three of your places, one of each kind of trigger, and a choice that changes the last line. Edit it or delete it — it is here to show the shape, not to be kept.",
+    "rewards": { "experience": 250, "gold": 120, "itemIds": [] },
+    "nodes": [
+      {
+        "nodeId": "qn_seed_1",
+        "name": "Walk the tree line",
+        "role": "forest",
+        "icon": "🌲",
+        "boundaryPercent": 80,
+        "minRadiusM": 25,
+        "maxRadiusM": 0,
+        "radius": 30,
+        "trigger": "walk",
+        "walkMeters": 300,
+        "spawnTableId": "",
+        "chestTier": "",
+        "chestLootTableId": "",
+        "requireFlag": "",
+        "setFlag": "",
+        "rewards": { "experience": 60, "gold": 20, "itemIds": [] },
+        "dialogue": [
+          {
+            "speaker": "The tanner",
+            "text": "Something has been taking deer at the edge of the wood, and not eating them. Walk the tree line and tell me what you see.",
+            "requireFlag": "",
+            "responses": []
+          }
+        ]
+      },
+      {
+        "nodeId": "qn_seed_2",
+        "name": "The thing in the thicket",
+        "role": "deepwood",
+        "icon": "⚔️",
+        "boundaryPercent": 60,
+        "minRadiusM": 25,
+        "maxRadiusM": 0,
+        "radius": 30,
+        "trigger": "fight",
+        "walkMeters": 0,
+        "spawnTableId": "",
+        "chestTier": "",
+        "chestLootTableId": "",
+        "requireFlag": "",
+        "setFlag": "",
+        "rewards": { "experience": 90, "gold": 30, "itemIds": [] },
+        "dialogue": [
+          {
+            "speaker": "",
+            "text": "The tracks go deeper than the tanner said, and they do not belong to anything with four legs.",
+            "requireFlag": "",
+            "responses": [
+              { "text": "Follow them.", "outcome": "next", "gotoNodeId": "", "setFlag": "saw_the_beast", "requireFlag": "" },
+              { "text": "Mark the spot and go back.", "outcome": "finish", "gotoNodeId": "", "setFlag": "went_back", "requireFlag": "" }
+            ]
+          }
+        ]
+      },
+      {
+        "nodeId": "qn_seed_3",
+        "name": "Tell her what you found",
+        "role": "market",
+        "icon": "💬",
+        "boundaryPercent": 100,
+        "minRadiusM": 20,
+        "maxRadiusM": 0,
+        "radius": 30,
+        "trigger": "talk",
+        "walkMeters": 0,
+        "spawnTableId": "",
+        "chestTier": "",
+        "chestLootTableId": "",
+        "requireFlag": "",
+        "setFlag": "",
+        "rewards": { "experience": 100, "gold": 70, "itemIds": [] },
+        "dialogue": [
+          {
+            "speaker": "The tanner",
+            "text": "Well? You have the look of somebody who found what they went for.",
+            "requireFlag": "",
+            "responses": []
+          },
+          {
+            "speaker": "The tanner",
+            "text": "You killed it. Good. I will not ask what it was — I have a guess and I would rather keep it.",
+            "requireFlag": "saw_the_beast",
+            "responses": [
+              { "text": "Take the coin.", "outcome": "next", "gotoNodeId": "", "setFlag": "", "requireFlag": "" }
+            ]
+          },
+          {
+            "speaker": "The tanner",
+            "text": "You came back without looking. That is a kind of sense, I suppose. Half pay, then.",
+            "requireFlag": "went_back",
+            "responses": [
+              { "text": "Fair enough.", "outcome": "next", "gotoNodeId": "", "setFlag": "", "requireFlag": "" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

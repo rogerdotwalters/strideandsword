@@ -4,6 +4,14 @@
 Object.assign(Game, {
   openNode(n) {
     if (this.inCombat) return;
+    /* A hand-placed location can be somebody with work for you instead of
+       something to fight. Same pin, same row, one checkbox — so the branch
+       belongs here, at the moment it is opened, rather than in a second kind
+       of node that everything downstream would have to know about. */
+    if (n.locationId && typeof Quests !== "undefined") {
+      const loc = Content.get("locations", n.locationId);
+      if (loc && loc.isQuestGiver) { this.openQuestGiver(n, loc); return; }
+    }
     const d = Loc.distanceTo(n);
     const s = settings();
     const range = +n.radius || s.interactRange;
@@ -48,8 +56,7 @@ Object.assign(Game, {
         buttons.push({ label: "Rest here", cls: "primary", onClick: () => { this.restAt(n); } });
       }
     }
-    UI.modal({ title: cleared ? "Cleared" : typeLabel, icon: n.icon, body, buttons,
-               onClose: () => { this._pendingNode = null; } });
+    UI.modal({ title: cleared ? "Cleared" : typeLabel, icon: n.icon, body, buttons });
   },
 
   looseTreasure(n) {

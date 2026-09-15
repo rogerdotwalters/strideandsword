@@ -273,3 +273,45 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
   .iconGrid button{min-height:44px}
   .closeX{width:38px;height:38px}
 }
+
+/* ============================================================
+   QUESTS
+   A quest form nests three deep — steps, lines, answers — so each
+   level gets a visible edge. Without them it reads as one long
+   column of inputs and you lose track of which step you are in.
+   ============================================================ */
+.floorBox{border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;background:var(--bg)}
+.floorBox.open{border-color:var(--gold-dim)}
+.floorHead{display:flex;align-items:center;gap:8px;padding:7px 9px;cursor:pointer;font-size:12.5px}
+.floorHead b{flex:none}
+.floorHead .spacer{flex:1}
+.floorHead:hover{background:var(--bg-3)}
+.floorBox.open .floorHead{border-bottom:1px solid var(--line)}
+.floorBody{padding:10px 9px 4px}
+
+.radiusRow{display:grid;grid-template-columns:1fr 84px;gap:9px;align-items:center;margin-bottom:11px}
+
+/* A dialogue beat. */
+.beatBox{
+  border:1px solid var(--line);border-left:2px solid var(--gold-dim);
+  border-radius:var(--r);padding:9px 10px 2px;margin-bottom:8px;background:var(--bg-2);
+}
+.beatHead{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.beatHead .spacer{flex:1}
+.beatBox textarea{min-height:64px}
+
+/* Answers. Five controls on a row is a lot, so they wrap rather than
+   squeezing every field down to nothing. */
+.respWrap{
+  border-top:1px solid var(--line);margin-top:4px;padding-top:9px;margin-bottom:9px;
+}
+.respRow{
+  display:grid;gap:6px;margin-bottom:7px;align-items:center;
+  grid-template-columns:minmax(120px,1.6fr) minmax(110px,1fr) minmax(90px,.9fr) minmax(90px,.9fr) auto;
+}
+.respRow select{width:100%}
+.respRow .input{font-size:12px;padding:6px 8px}
+@media (max-width:1150px){
+  .respRow{grid-template-columns:1fr 1fr;}
+  .respRow button{grid-column:2;justify-self:end}
+}

@@ -23,6 +23,7 @@ const Content = (function () {
     locations: "content_locations",
     dungeons:    "content_dungeons",
     instances: "content_instances",
+    quests:    "content_quests",
     config:    "content_config"
   };
 
@@ -34,10 +35,12 @@ const Content = (function () {
     spawns:    "spawnTableId",
     locations: "locationId",
     dungeons:    "dungeonId",
-    instances: "instanceId"
+    instances: "instanceId",
+    quests:    "questId"
   };
   const ID_PREFIX = {
-    monsters: "mon", loot: "lt", items: "itm", spawns: "sp", locations: "loc", dungeons: "dlv", instances: "inst"
+    monsters: "mon", loot: "lt", items: "itm", spawns: "sp", locations: "loc",
+    dungeons: "dlv", instances: "inst", quests: "qst"
   };
 
   /* ---------------------------------------------------------------- rarity */
@@ -427,6 +430,12 @@ const Content = (function () {
       timeStart: "", timeEnd: "",       // "09:00"–"17:00"; blank = always open
       days: [],                         // 0=Sun … 6=Sat; empty = every day
       respawnMinutes: 0,                // 0 = once cleared, stays cleared
+      /* A location is either somewhere you fight, loot or rest — or somebody
+         standing there with work for you. One checkbox, because it is the
+         same pin either way and a second kind of pin would be a second thing
+         to keep in step. */
+      isQuestGiver: false,
+      questId: "",                      // which quest they hand out
       /* Art. A location can carry a PNG that sits on the map underneath its
          pin. `image` is either a path relative to the page (art/well.png) or a
          data: URL from a file you dropped in. It is sized in metres, not
@@ -1228,9 +1237,13 @@ const Content = (function () {
       latitude: +loc.latitude, longitude: +loc.longitude,
       radius: +loc.radius || 35,
       name: loc.name || (building ? cap(building.label) : site.label),
-      icon: loc.kind === "landmark" ? site.icon
+      // A quest giver reads as one on the map. Somebody with work for you is
+      // not the same pin as a thing to kill, whatever the kind field says.
+      icon: loc.isQuestGiver ? "\ud83d\udcdc"
+          : loc.kind === "landmark" ? site.icon
           : loc.kind === "treasure" ? (chest.key ? "\ud83e\uddf0" : site.icon)
           : (building ? building.icon : site.icon),
+      isQuestGiver: !!loc.isQuestGiver,
       buildingType: loc.buildingType,
       spawnTableId: loc.spawnTableId || "",
       chestTier: loc.chestTier || "", chestLootTableId: loc.chestLootTableId || "",

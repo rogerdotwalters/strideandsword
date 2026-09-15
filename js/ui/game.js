@@ -6,7 +6,7 @@ const Game = {
   playerMarker: null, accCircle: null, zoneCircle: null,
   nodeMarkers: {}, rangeCircle: null,
   inCombat: false, locMsg: "", trail: null, trailPts: [],
-  _pendingNode: null, _regenTimer: null,
+  _regenTimer: null,
 
   reset() {
     Loc.stop();
@@ -14,11 +14,12 @@ const Game = {
     this.ch = null; this.zone = null; this.nodes = []; this.map = null;
     this.nodeMarkers = {}; this.trailPts = []; this.inCombat = false;
     this.mapless = false;
-    this.instDoors = null; this._pendingInst = null;
+    this.instDoors = null;
     this.world = null; this._worldZone = null; this._worldBusy = false;
     this._chunkBusy = false; this._lastChunkSync = 0;
     this.tiles = null; this.worldLayer = null;
-    this.dungeonLayer = null; this.dungeonShapes = {}; this._pendingDungeon = null;
+    this.dungeonLayer = null; this.dungeonShapes = {};
+    this.questLayer = null;
     this.artLayer = null;
     this.streetLabels = null; this.buildingLabels = null;
     this._locPrompt = false;
@@ -47,10 +48,21 @@ const Game = {
           '<div class="who"><b id="chName"></b><span id="chSub"></span></div>' +
         "</div>" +
         '<div class="spacer"></div>' +
+        '<button class="iconBtn" id="btnSites" title="What\'s around you">📍</button>' +
+        '<button class="iconBtn" id="btnQuests" title="Quests">📜</button>' +
         '<button class="iconBtn" id="btnSheet" title="Character">📋</button>' +
         '<button class="iconBtn" id="btnBag" title="Inventory">🎒</button>' +
         '<button class="iconBtn" id="btnMenu" title="Menu">☰</button>' +
       "</div>" +
+      /* Everything you could walk up to, nearest first. This is how you open
+         things now that walking near one no longer does it for you. */
+      '<aside class="siteList hidden" id="siteList">' +
+        '<div class="slHead"><b>Around you</b>' +
+          '<span class="spacer"></span>' +
+          '<button class="btn sm ghost" id="slClose" title="Hide">✕</button>' +
+        "</div>" +
+        '<div class="slBody" id="slBody"></div>' +
+      "</aside>" +
       // Directly after the dev panel so CSS can slide it aside when that opens.
       '<div id="devPanel" class="hidden"></div>' +
       '<div class="zoomModes hidden" id="zoomModes"></div>' +
@@ -81,6 +93,14 @@ const Game = {
     $("#btnSheet").onclick = () => Panels.sheet();
     $("#btnBag").onclick   = () => Panels.inventory();
     $("#btnMenu").onclick  = () => Panels.menu();
+    $("#btnSites").onclick = () => this.toggleSiteList();
+    $("#btnQuests").onclick = () => this.questLog();
+    $("#slClose").onclick  = () => this.toggleSiteList(false);
+    /* Open by default where there is room for it beside the map, shut on a
+       phone where it would cover the thing it is describing. Whatever you do
+       with it after that is remembered. */
+    const s0 = settings();
+    this.toggleSiteList(s0.siteListOpen == null ? window.innerWidth >= 900 : !!s0.siteListOpen);
 
     const toggle = $("#modeToggle");
     toggle.checked = settings().locationMode === "sim";
@@ -153,6 +173,7 @@ const Game = {
     }).addTo(this.map);
 
     this.worldLayer = L.layerGroup().addTo(this.map);   // fantasy roads + buildings
+    this.shapeLayer = L.layerGroup().addTo(this.map);   // buildings you drew yourself
     this.trail = L.polyline([], { color: "#4a8fd4", weight: 3, opacity: .5, dashArray: "4 6" }).addTo(this.map);
 
     // Dev: click to teleport (only while dev testing is switched on)
@@ -285,6 +306,7 @@ const Game = {
       this.drawNodes();
       this.drawDungeons();
       this.drawInstanceDoors();
+      this.drawQuestNodes();
       this.renderDungeonBar();
       if (Instance.current()) this.enterInstanceView();
       else this.renderInstanceBar();
@@ -360,6 +382,7 @@ const Game = {
           this._drewFirstCell = true;
           this.world = Chunks.mergedWorld();
           this.renderWorld(this.world);
+          this.drawShapes();
           this.nodes = this.visibleNodes();
           this.drawNodes();
         }
@@ -385,6 +408,7 @@ const Game = {
       this.renderWorld(this.world);
       this.snapNodesToBuildings(this.world);
     }
+    this.drawShapes();
     this.applyZoomDetail();
 
     this.nodes = this.visibleNodes();
@@ -393,6 +417,9 @@ const Game = {
     this.drawNodes();
     this.drawDungeons();
     this.drawInstanceDoors();
+    this.drawQuestNodes();
+    this.drawDenizens();
+    this.renderSiteList(true);
     this.refreshDevReadout();
     return r.changed;
   },
@@ -437,6 +464,7 @@ const Game = {
     this.renderDungeonBar();
     if (!Instance.current()) this.renderInstanceBar();
     if (this.mapless) this.renderListView();
+    this.renderSiteList(true);
     this.fillDevJump();
     return n;
   },
@@ -460,6 +488,9 @@ const Game = {
       this.drawNodes();
       this.drawDungeons();
       this.drawInstanceDoors();
+      this.drawShapes();
+      this.drawQuestNodes();
+      this.drawDenizens();
     }
     this.renderDungeonBar();
     if (!Instance.current()) this.renderInstanceBar();
@@ -582,6 +613,32 @@ const Game = {
       this.world = null;
     }
     return this.syncChunks({ force: true });
+  },
+
+  /**
+   * The buildings you drew yourself, on top of the generated town.
+   *
+   * They come from their own table and their own file (js/world/shapes.js),
+   * nothing here writes to them, and they are drawn last so a hand-drawn
+   * keep sits over the OSM footprint it was traced from rather than under it.
+   * Only what is near enough to see: the table can hold a whole town and
+   * drawing all of it at every fix would cost more than the world does.
+   */
+  drawShapes() {
+    if (this.mapless || !this.shapeLayer || typeof Shapes === "undefined") return 0;
+    this.shapeLayer.clearLayers();
+    const p = Loc.last;
+    if (!p || !settings().fantasyMap) return 0;
+    const rows = Shapes.near(p.latitude, p.longitude, this.drawRangeM())
+      .slice().sort((a, b) => (+a.z || 0) - (+b.z || 0));
+    rows.forEach(s => {
+      const style = Shapes.styleOf(s);
+      style.interactive = false;        // scenery, not something to click
+      style.className = "drawnShape";
+      const layer = s.kind === "line" ? L.polyline(s.points, style) : L.polygon(s.points, style);
+      this.shapeLayer.addLayer(layer);
+    });
+    return rows.length;
   },
 
   renderWorld(world) {
@@ -787,6 +844,170 @@ const Game = {
     });
   },
 
+  /* ================================================== THE SIDEBAR ========
+     Walking near something stopped opening it, so there has to be somewhere
+     to see what is within reach and go in deliberately. One list for all
+     three kinds of thing, because from the player's side they are all just
+     "somewhere I could walk up to". */
+
+  /**
+   * Everything you could interact with, nearest first.
+   *
+   * `inRange` is the only thing the list greys on. A row that is out of range
+   * still opens — its panel explains how far away it is — because refusing the
+   * tap tells you less than the panel does.
+   */
+  interactables() {
+    const p = Loc.last;
+    if (!p) return [];
+    const s = settings();
+    const out = [];
+
+    this.nodes.forEach(n => {
+      const d = Loc.distanceTo(n);
+      if (d == null) return;
+      /* Only what you could actually name. A site outside the sight radius is
+         a "?" on the map, and listing it here by name with a difficulty would
+         hand you exactly what the "?" exists to withhold. Once discovered it
+         stays listed however far you wander. */
+      if (!this.inSight(n) && n.status === "undiscovered") return;
+      const range = +n.radius || s.interactRange;
+      out.push({
+        key: "n:" + n.nodeId, kind: "node", icon: n.status === "cleared" ? "✓" : n.icon,
+        name: n.name, distance: d, range, inRange: d <= range,
+        done: n.status === "cleared",
+        note: n.closed ? "closed right now"
+            : n.status === "cleared" ? "cleared"
+            : n.type === "landmark" ? "landmark" : "difficulty " + n.difficulty,
+        open: () => this.openNode(n)
+      });
+    });
+
+    this.dungeons().forEach(d => {
+      const edge = Content.distanceToDungeon(d, p.latitude, p.longitude);
+      const range = +d.entryRange || 25;
+      const kind = Content.dungeonKind(d.kind);
+      const run = Dungeon.pausedFor(d.dungeonId);
+      out.push({
+        key: "d:" + d.dungeonId, kind: "dungeon", icon: kind.icon,
+        name: d.name || cap(kind.label), distance: edge, range, inRange: edge <= range,
+        done: Dungeon.cooldownLeft(d) > 0,
+        note: run ? "a run of yours is held here"
+            : Dungeon.cooldownLeft(d) > 0 ? "sealed for now"
+            : (d.floors || []).length + " floor" + ((d.floors || []).length === 1 ? "" : "s"),
+        open: () => Dungeon.open(d, edge)
+      });
+    });
+
+    this.instances().forEach(d => {
+      const dist = haversine(p.latitude, p.longitude, d.latitude, d.longitude);
+      const range = +d.radius || 30;
+      const kind = Content.instanceKind(d.kind);
+      out.push({
+        key: "i:" + d.instanceId, kind: "instance", icon: kind.icon,
+        name: d.name || cap(kind.label), distance: dist, range, inRange: dist <= range,
+        done: Instance.cooldownLeft(d) > 0,
+        note: Instance.cooldownLeft(d) > 0 ? "sealed for now"
+            : (d.levels || []).length + " level" + ((d.levels || []).length === 1 ? "" : "s"),
+        open: () => Instance.open(d, dist)
+      });
+    });
+
+    /* Things that move. They are in the list for the same reason everything
+       else is — you cannot tap what you cannot find — and their distance is
+       read from where they are *now*, which is a different number every time
+       the list refreshes. That is the point of them. */
+    if (typeof Denizens !== "undefined") {
+      (this._denizens || []).forEach(d => {
+        const dist = haversine(p.latitude, p.longitude, d.latitude, d.longitude);
+        out.push({
+          key: "z:" + d.denizenId, kind: "denizen", icon: d.icon,
+          name: d.name, distance: dist, range: s.interactRange,
+          inRange: dist <= s.interactRange, done: false,
+          note: d.kind === "character"
+            ? (d.questId ? "has work for you" : "wandering")
+            : "difficulty " + d.difficulty + " · " + (d.zone.name || "its patch"),
+          open: () => this.openDenizen(d)
+        });
+      });
+    }
+
+    /* Quest nodes go in too, and first among equals: the thing you are on is
+       the thing you are most likely to want to open. */
+    Quests.liveNodes().forEach(live => {
+      const d = haversine(p.latitude, p.longitude, live.latitude, live.longitude);
+      const t = Quests.TRIGGERS[live.trigger] || Quests.TRIGGERS.arrive;
+      out.push({
+        key: "q:" + live.questId, kind: "quest", icon: live.icon,
+        name: live.name, distance: d, range: live.radius, inRange: d <= live.radius,
+        done: false, quest: true,
+        note: live.questName + " · " + t.name.toLowerCase() +
+              (live.trigger === "walk" ? " " + Math.round(live.walked) + "/" + live.walkMeters + " m" : ""),
+        open: () => this.openQuestNode(live)
+      });
+    });
+
+    // Nearest first, and capped: past a couple of dozen this stops being a
+    // list of what is around you and becomes a scrollbar.
+    return out.sort((a, b) => (b.quest ? 1 : 0) - (a.quest ? 1 : 0) || a.distance - b.distance)
+              .slice(0, 25);
+  },
+
+  toggleSiteList(open) {
+    const host = $("#siteList");
+    if (!host) return;
+    const want = open == null ? host.classList.contains("hidden") : !!open;
+    host.classList.toggle("hidden", !want);
+    const btn = $("#btnSites");
+    if (btn) btn.classList.toggle("on", want);
+    saveSettings({ siteListOpen: want });
+    if (want) this.renderSiteList(true);
+  },
+
+  /**
+   * Redraw the list. Called on every position fix, so it does the cheap thing:
+   * unless the *set* of rows changed, only the distances are rewritten —
+   * rebuilding the markup every second would fight the user's scrolling and
+   * swallow the tap they were halfway through.
+   */
+  renderSiteList(force) {
+    const host = $("#slBody");
+    if (!host || $("#siteList").classList.contains("hidden")) return;
+    const rows = this.interactables();
+    const sig = rows.map(r => r.key + (r.inRange ? "1" : "0") + (r.done ? "d" : "")).join("|");
+
+    if (!force && sig === this._siteSig) {
+      rows.forEach(r => {
+        const dEl = host.querySelector('[data-site="' + r.key + '"] .slDist');
+        if (dEl) dEl.textContent = fmtDist(r.distance);
+      });
+      return;
+    }
+    this._siteSig = sig;
+
+    if (!rows.length) {
+      host.innerHTML = '<div class="slEmpty">Nothing within reach yet. Walk a little.</div>';
+      return;
+    }
+    host.innerHTML = rows.map(r =>
+      '<button class="slRow' + (r.inRange ? " near" : " far") + (r.done ? " done" : "") +
+        '" data-site="' + esc(r.key) + '">' +
+        '<span class="slIco">' + r.icon + "</span>" +
+        '<span class="slText"><b>' + esc(r.name) + "</b>" +
+          '<span class="slNote">' + esc(r.note) + "</span></span>" +
+        '<span class="slDist">' + fmtDist(r.distance) + "</span>" +
+      "</button>").join("");
+
+    const byKey = {};
+    rows.forEach(r => { byKey[r.key] = r; });
+    host.querySelectorAll(".slRow").forEach(btn => {
+      btn.onclick = () => {
+        const r = byKey[btn.getAttribute("data-site")];
+        if (r) r.open();
+      };
+    });
+  },
+
   drawZone() {
     if (this.mapless) return;
     if (this.zoneCircle) this.map.removeLayer(this.zoneCircle);
@@ -946,6 +1167,11 @@ const Game = {
     this.ensureZone();
     this.runSpawner();
     this.updateSight();
+    // Before proximity: if this walk has taken you out of a dungeon, the list
+    // and the bar should say so on the same fix rather than the next one.
+    if (Dungeon.current()) { Dungeon.checkLeash(); this.renderDungeonBar(); }
+    this.checkQuestProximity();
+    this.drawDenizens();
     this.checkProximity();
     this.renderHud();
     this.refreshDevReadout();
@@ -1032,7 +1258,9 @@ const Game = {
     const pct = clamp(run.walked / len * 100, 0, 100);
     const next = Dungeon.nextStop();
     const kind = Content.dungeonKind(d.kind);
+    const leash = Dungeon.leashState(run);
     host.classList.remove("hidden");
+    host.classList.toggle("straying", !!(leash && leash.warn));
     host.innerHTML =
       '<div class="dvTop">' +
         '<span class="dvIco">' + kind.icon + "</span>" +
@@ -1047,7 +1275,13 @@ const Game = {
         "<span>" + (next
           ? (Content.STOP_KINDS[next.stop.kind] || {}).icon + " in " + Math.max(0, Math.round(next.away)) + " m"
           : "the way is clear") + "</span>" +
-      "</div>";
+      "</div>" +
+      // How much rope is left. Only shown once you are actually wandering —
+      // a readout that is always there is one nobody reads.
+      (leash && leash.warn
+        ? '<div class="dvLeash">⚠ ' + Math.round(leash.away) + " m from the door · " +
+          leash.left + " m before you step out</div>"
+        : "");
     const btn = $("#dgnLeave");
     if (btn) btn.onclick = () => Dungeon.leave();
   },
@@ -1061,12 +1295,8 @@ const Game = {
       const near = edge <= (+d.entryRange || 25);
       const pin = document.querySelector('.dungeonPin[data-dungeon="' + d.dungeonId + '"]');
       if (pin) pin.classList.toggle("inrange", near && Dungeon.canEnter(d, edge).ok);
-      if (near && this._pendingDungeon !== d.dungeonId) {
-        this._pendingDungeon = d.dungeonId;
-        Dungeon.open(d, edge);
-        return;                    // one door at a time
-      }
-      if (!near && this._pendingDungeon === d.dungeonId) this._pendingDungeon = null;
+      // Standing on the doorstep lights the door up. It does not walk you
+      // through it — see checkProximity.
     }
   },
 
@@ -1114,12 +1344,7 @@ const Game = {
       const near = dist <= (+d.radius || 30);
       const pin = document.querySelector('.instDoor[data-inst="' + d.instanceId + '"]');
       if (pin) pin.classList.toggle("inrange", near && Instance.canEnter(d, dist).ok);
-      if (near && this._pendingInst !== d.instanceId) {
-        this._pendingInst = d.instanceId;
-        Instance.open(d, dist);
-        return;
-      }
-      if (!near && this._pendingInst === d.instanceId) this._pendingInst = null;
+      // Lit, not entered. Tap the door or the sidebar row to go in.
     }
   },
 
@@ -1297,13 +1522,16 @@ const Game = {
         UI.toast("Discovered: " + esc(n.name), "good", 3000);
         this.drawNode(n);
       }
-      if (near && n.status === "discovered" && !this._pendingNode) {
-        this._pendingNode = n.nodeId;
-        this.openNode(n);
-      }
-      if (!near && this._pendingNode === n.nodeId) this._pendingNode = null;
+      /* Walking near something no longer opens it.
+         It used to: the first fix inside the radius called openNode, and
+         `_pendingNode` only cleared once you left again — so standing at the
+         edge, where GPS wanders in and out by a few metres, reopened the same
+         modal over and over, and any modal blocks the map underneath it.
+         Proximity now only *discovers*; opening is a tap, on the pin or in the
+         sidebar. */
     }
     if (changed) this.renderHud();
+    this.renderSiteList();
   },
 
   /* ---- HUD ---- */
@@ -1557,6 +1785,11 @@ const Game = {
     Dungeon.advance(meters);
     // Inside an instance, they carry you forward along your heading instead.
     Instance.advance(meters);
+    // And a quest node that wants you to pace a place counts them while you
+    // are standing in that place.
+    if (typeof Quests !== "undefined" && Quests.addWalk(meters)) {
+      this.drawQuestNodes(); this.renderSiteList(true);
+    }
 
     const bank = (w.xpBanked || 0) + meters / 4;
     const whole = Math.floor(bank);

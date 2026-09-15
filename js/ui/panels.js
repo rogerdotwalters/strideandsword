@@ -26,6 +26,25 @@ const Panels = {
           st("Crit %", Calc.critChance(c).toFixed(1)) + st("Crit resist", Calc.critResist(c).toFixed(1)) +
           st("Shop price", Math.round(Calc.priceMod(c) * 100) + "%") +
         "</div>" +
+        // What this character has actually done, beside what they can do.
+        (typeof Quests !== "undefined" ? (() => {
+          const t = Quests.tally(c.characterId);
+          return '<h4 style="margin:16px 0 8px;font-size:12px;text-transform:uppercase;' +
+            'letter-spacing:1px;color:var(--ink-3)">Deeds</h4>' +
+            '<div class="statGrid">' +
+              st("Quests finished", t.completed) +
+              st("Different ones", t.unique) +
+              st("In hand", t.inHand) +
+            "</div>" +
+            (t.list.length
+              ? '<div class="itemList" style="margin-top:8px">' + t.list.slice(0, 8).map(q =>
+                  '<div class="item"><span class="ico">📜</span><div class="body">' +
+                  '<div class="nm">' + esc(q.name) + (q.gone ? ' <span class="tiny dimmer">(deleted)</span>' : "") +
+                  "</div><div class='ds'>" +
+                  (q.completions > 1 ? q.completions + " times" : "once") + "</div></div></div>").join("") +
+                "</div>"
+              : "");
+        })() : "") +
         '<h4 style="margin:16px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-3)">Abilities</h4>' +
         '<div class="itemList">' + CLASSES[c.class].skills.map(sk => {
           const known = c.level >= sk.lvl;
@@ -195,6 +214,21 @@ const Panels = {
         "> <span>Fantasy overlay <small class='dimmer'>— real roads and buildings, renamed</small></span></label>" +
       '<label class="tick"><input type="checkbox" id="setSnap"' + (s.snapNodesToBuildings ? " checked" : "") +
         "> Put sites on real buildings</label>" +
+      // Your real places, and how far through naming them you are.
+      (typeof Haunts !== "undefined"
+        ? '<div class="divider"></div>' +
+          '<h4 style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-3)">Your places</h4>' +
+          '<p class="tiny dim" style="margin:0 0 8px">' +
+            (Haunts.progress().set
+              ? Haunts.list().map(h => Haunts.role(h.role).icon + " " + esc(h.name)).join(" · ")
+              : "None named yet — quests will guess where to send you.") + "</p>"
+        : "") +
+      // The shapes you drew yourself, from the shape editor's own file.
+      '<p class="tiny dimmer" style="margin:6px 0 0">' +
+        (typeof Shapes !== "undefined" && Shapes.stats().shapes
+          ? "Drawing <b>" + Shapes.stats().shapes + "</b> hand-drawn shape" +
+            (Shapes.stats().shapes === 1 ? "" : "s") + " over the town."
+          : "No hand-drawn shapes yet — draw some in the shape editor.") + "</p>" +
       '<label class="field" style="margin-top:12px"><span>Real map showing through: <b id="tileVal">' +
         Math.round(s.tileOpacity * 100) + '</b>%</span>' +
         '<input type="range" min="0" max="100" step="5" id="setTile" value="' + Math.round(s.tileOpacity * 100) + '" style="width:100%"></label>' +
@@ -221,6 +255,11 @@ const Panels = {
     const actions = el("div");
     actions.style.cssText = "display:flex;flex-direction:column;gap:7px";
     const mk = (label, cls, fn) => { const b = el("button", "btn block " + cls, label); b.onclick = fn; actions.appendChild(b); };
+    mk("Your places", "ghost", () => {
+      m.close();
+      Game.openHauntPicker();
+    });
+    mk("Open the shape editor", "ghost", () => { window.open("shapes.html", "_blank"); });
     mk("Resurvey the streets", "ghost", () => {
       m.close();
       // Every chunk, not one zone — the world is a grid now.

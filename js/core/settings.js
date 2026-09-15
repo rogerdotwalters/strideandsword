@@ -27,6 +27,16 @@ const DEFAULT_SETTINGS = {
   zoomStreet: 16,            // "driving" preset — the whole zone and its roads
   zoomWalk: 19.5,            // "walking" preset — individual buildings, named
   followPlayer: true,
+  siteListOpen: null,        // the sidebar: null = decide by screen width
+  /* The faint outlines around what lives where. Worth having on by default:
+     a creature turning at an invisible line looks like a bug, and the same
+     creature turning at a drawn edge looks like a territory. */
+  showTerritories: true,
+  /* How far a dungeon run may stray from its own door before it is paused.
+     A dungeon is a place you are inside; walking half a mile away and still
+     counting those metres as progress reads as a bug even though it was the
+     original design. The warning starts at 70% of it. */
+  dungeonLeashM: 250,
   devMode: false,            // dev panel visibility (forced on in sim mode)
   highAccuracy: true,
   dailyGoalMeters: 3000,

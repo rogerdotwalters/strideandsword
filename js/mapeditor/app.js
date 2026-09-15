@@ -818,6 +818,14 @@ Object.assign(Me, {
         this.fld("f_imageRotation", "Rotation (degrees)", +d.imageRotation || 0, { type: "number" }) +
       "</div>" +
 
+      /* A location is either something to fight, loot or rest at — or somebody
+         standing there with work for you. One checkbox rather than a second
+         kind of pin, because it is the same row in the same table either way. */
+      '<div class="sect">Quests</div>' +
+      '<label class="check"><input type="checkbox" id="f_isQuestGiver"' +
+        (d.isQuestGiver ? " checked" : "") + "> This is a quest giver</label>" +
+      '<div id="f_questWrap"></div>' +
+
       '<div class="sect">Monster spawns</div>' +
       this.sel("f_spawnTableId", "Spawn table", d.spawnTableId, spawnOpts) +
       '<div id="f_spawnInfo"></div>' +
@@ -856,6 +864,8 @@ Object.assign(Me, {
     this.bind("f_difficulty", "difficulty", this.int, () => this.drawLocations());
     this.bind("f_active", "active", Boolean);
     this.bind("f_spawnTableId", "spawnTableId", null, () => this.renderSpawnInfo());
+    this.bind("f_isQuestGiver", "isQuestGiver", null, () => this.renderQuestInfo());
+    this.renderQuestInfo();
     this.bind("f_chestTier", "chestTier", null, () => this.renderChest());
     this.bind("f_timeStart", "timeStart", null, () => this.renderTimeNote());
     this.bind("f_timeEnd", "timeEnd", null, () => this.renderTimeNote());
@@ -960,6 +970,28 @@ Object.assign(Me, {
         this.renderTimeNote();
       };
     });
+  },
+
+  /**
+   * What this giver is actually handing out. The quest itself is authored in
+   * the content editor — a quest has no position, so there is nothing here to
+   * drag — and this picks which of them this location offers.
+   */
+  renderQuestInfo() {
+    const wrap = $("#f_questWrap");
+    if (!wrap) return;
+    const d = this.draft;
+    if (!d || !d.isQuestGiver) { wrap.innerHTML = ""; return; }
+    const quests = Content.list("quests");
+    const mine = quests.filter(q => q.giverLocationId === d.locationId);
+    wrap.innerHTML =
+      '<p class="noteBox">Quests are written in the <b>content editor</b>, under Quests — ' +
+      "a quest has no place on a map until you are playing it, so there is nothing to draw here. " +
+      "Point one at this location from that tab and it will show up below.</p>" +
+      (quests.length
+        ? '<div class="kv"><span>Handed out here</span><b>' +
+          (mine.length ? esc(mine.map(q => q.name).join(", ")) : "nothing yet") + "</b></div>"
+        : '<p class="tiny dimmer">No quests written yet.</p>');
   },
 
   renderSpawnInfo() {

@@ -4,9 +4,10 @@ A location-based roguelike for walking around the office. Your phone's GPS moves
 your character; the real streets and buildings around you are redrawn as a
 fantasy town, and the interesting sites are a deliberate walk away.
 
-Three pages: the game, a content editor for its monsters, loot tables and
-items, and a map editor for placing the locations, dungeons and instances it
-spawns from. Plain files — no framework, no bundler, no build step at all. The
+Four pages: the game, a content editor for its monsters, loot tables, items and
+quests, a map editor for placing the locations, dungeons and instances it spawns
+from, and a shape editor for drawing your own fantasy buildings over the real
+map. Plain files — no framework, no bundler, no build step at all. The
 JavaScript is a tree of small files loaded with `<script src>`, and the game's
 starting data is a folder of JSON you can open and edit.
 
@@ -84,10 +85,12 @@ failing silently — see the location gate and its **Show diagnostics** button.
     index.html        the game
     editor.html       the content editor
     mapeditor.html    the map editor
+    shapes.html       the shape editor
     css/
       game.css        the game's styles
       editor.css      content editor
-      mapeditor.css   map editor
+      mapeditor.css   map editor (the shape editor borrows this too)
+      shapes.css      only what the shape editor adds to it
     js/
       core/
         util.js       helpers, geo maths, formatting
@@ -112,6 +115,10 @@ failing silently — see the location gate and its **Show diagnostics** button.
         zones.js      zones and procedural node scatter
         location.js   geolocation, distance accumulation, proximity
         art.js        the PNGs that sit on the map
+        shapes.js     hand-drawn buildings: the model, shared with the editor
+        haunts.js     your real places, and what they are in the world
+        quests.js     quest definitions, runs, dialogue and flags
+        denizens.js   things that move, and the boundaries that hold them
         placement.js  the scoring core: what goes where, and how often
         spawner.js    the lifecycle: what appears when, and what expires
         walk.js       the pedometer and the daily goal
@@ -122,14 +129,18 @@ failing silently — see the location gate and its **Show diagnostics** button.
         screens.js    routing between screens
         game.js       the game controller, map and HUD
         nodes.js      node interaction
+        questui.js    the places picker, quest nodes on the map, dialogue
         panels.js     character sheet, inventory, menu, settings
       dev/devpanel.js the dev-test panel
       boot.js         loads the database, then shows a screen
-      editor/app.js    the content editor
+      editor/
+        app.js        the content editor
+        quests.js     its Quests tab
       mapeditor/
         app.js        map, table, and the location form
         dungeons.js   the dungeon layer: footprints, resizing, floors
         instances.js  the instance layer: doors and their levels
+      shapes/app.js   the shape editor
     data/             the seeded database — see below
     art/              PNGs that locations can put on the map
     tools/            tests and tooling (not deployed)
@@ -158,6 +169,8 @@ any editor:
     data/instances.json   2 sample instances
     data/players.json     test logins — `tester` / `walk1234`
     data/spawn-rules.json the spawn weights — see below
+    data/shapes.json      hand-drawn scenery — empty until you draw some
+    data/quests.json      one sample quest, three steps
 
 On boot, `js/core/db.js` fetches all of it and seeds any table that has **never
 been written**. A table you have edited — or deliberately emptied — is left
@@ -484,6 +497,25 @@ a position fix, and when the tab comes back to the front, rate-limited to about
 twice a minute. Nothing runs while nobody is watching, and the answer is the
 same either way because it is derived from the time rather than accumulated.
 
+## What's around you
+
+**Walking near something no longer opens it.** It used to: the first fix inside
+a site's radius opened its panel, and the guard against repeating only cleared
+once you left again — so standing at the edge, where GPS wanders by a few
+metres, reopened the same modal over and over, and a modal covers the map
+underneath it.
+
+Proximity now only *discovers*. Opening is a tap, and the **📍 sidebar** is
+where you do it: every site, dungeon door and instance door you could walk up
+to, nearest first, with what it is and how far. In range, a row is lit; out of
+range it is greyed — but still tappable, because its panel telling you how far
+away it is beats a dead row that tells you nothing.
+
+The list shows what you can actually name: a site outside your 300 m sight is a
+`?` on the map, and listing it by name would hand you exactly what the `?`
+exists to withhold. It is open beside the map on a wide screen and a drawer on
+a phone, and it remembers which you chose.
+
 ## Dungeons
 
 A location is a point you stand on. A **dungeon** is an area you walk into: a
@@ -507,6 +539,13 @@ the last floor pays a completion bonus and seals it for its cooldown.
 is your office, so leaving pauses the run at the metre you left it, and walking
 back to the door offers *Pick it up* or *Start over*. Being killed does end the
 run — but it leaves the dungeon itself untouched, so you can go back in.
+
+**A run is leashed to its door.** Metres walked are the whole mechanic, which
+left a hole: a walk across town counted every one of those metres as progress
+along a floor. So a run remembers where it went in, the bar warns as you near
+the limit (250 m by default, in the menu), and past it the run is *paused* —
+the same thing stepping out does, so nothing is lost and walking back picks it
+up. Metres walked while you are outside do not count.
 
 Authoring is the **Dungeons** tab of the map editor. Draw a circle or a
 rectangle, drag the door to move it, and resize it either with the sliders in
@@ -566,6 +605,199 @@ radius and pace, then add levels — the floor's width and height in metres,
 roaming monsters, chests, and whether something guards the stairs. The preview
 under each level is the floor exactly as it will be, with one roll of where
 things stand. Only the contents are rolled; the floor is what you typed.
+
+## Quests
+
+A quest is a **chain of places**, and the places are yours.
+
+### Name your places first
+
+Menu → **Your places**. Eight slots — home, two parks, the grocery, and four
+food-or-recreation spots — each assigned a role in the fantasy world: your park
+is the Greenwood, the second one the Deep Wood, the supermarket the Market
+Square, and so on through the tanner, the meat cutter, the guild hall.
+
+You pick them from **what the map survey already found near you**, by name, with
+a dropped pin for anything it missed. No geocoder and no rate limit: the data is
+already on the device because you walked past it. A park chosen this way arrives
+with its **real outline**, which is what lets a quest land inside it rather than
+somewhere near the middle.
+
+They belong to your account, not to one character — your home does not move when
+you roll a new one.
+
+### A quest node names a role, not a place
+
+That is the whole trick. A step that said "park1" would be a quest about your
+park; a step that says "a forest" is a quest anybody can run against their own
+wood. If you have not named your places yet, quests improvise from the survey
+rather than stalling.
+
+Each step has a **trigger**:
+
+- **arrive** — be there
+- **walk** — be there, then cover a set distance *there*. Metres only count
+  while you are at the place; walking home is not progress on pacing the wood.
+- **fight** — arrive and win
+- **search** — arrive and open what is there
+- **talk** — arrive and hear them out
+
+### Where inside the park it lands
+
+Three numbers, and they resolve in a fixed order: a **boundary percentage** (100
+is the whole park, 50 the middle half), a **floor** so a small park does not
+collapse to a point, and an optional **ceiling**. The floor beats the
+percentage, and the park's own size beats the floor — a 15 m pocket park cannot
+hold a 25 m quest area, and pretending otherwise puts the objective in the road.
+The editor previews all three against a 40 m, a 120 m and a 400 m park as you
+drag the slider.
+
+On the map the objective is drawn as a **ring plus a pin**, because "somewhere
+in the greenwood" is the honest shape of it.
+
+### Quest givers
+
+Tick **This is a quest giver** on any hand-placed location in the map editor,
+then point a quest at it from the content editor. The pin becomes a scroll and
+walking up to it offers the quest instead of a fight. Same row, same table, one
+checkbox.
+
+### Dialogue: lines, answers, and flags
+
+Each step carries an ordered list of **lines** — a speaker and what they say.
+The last line can offer up to four **answers**, and an answer does something:
+carry on, accept, walk away, start the fight, finish the step, or **jump to
+another step**. An answer can **set a flag**, and any line or step can require
+one.
+
+That is deliberately one step short of a dialogue tree. A canvas with edges and
+conditions is a large build serving branching nobody writes for a walking game,
+where the walking is the content and dialogue is flavour plus a decision. Flags
+give you the branch that matters — did you go back, or did you follow the
+tracks? — and the sample quest's last step has a different line for each. The
+data is a strict subset of a tree, so a canvas could be built over it later
+without changing anything.
+
+One authoring rule worth knowing: a flag on the **step** is set whichever answer
+you gave, a flag on the **answer** records the choice. Put "saw the beast" on
+the answer, "reached the clearing" on the step.
+
+📜 in the top bar is the quest log — what is in hand, which step, where, and how
+far through a walk you are.
+
+### What you have finished
+
+XP says how much you have done; the quest tally says *what*. Finishing the last
+step of a quest bumps `questsCompleted` on the character, and the detail behind
+that number is derived from the runs rather than stored beside them, so the two
+cannot drift: **Deeds** on the character sheet gives the count, and the quest log
+lists what was finished, how many times each, most recent first. A run snapshots
+its quest's name when it finishes, so deleting a quest from the editor leaves the
+tally able to name what you did — marked as gone, still counted.
+
+## The living world
+
+A park with a quest node in it is still an empty park. `js/world/denizens.js`
+puts things in it: creatures that pace their own patch of ground, and characters
+who walk between places — on the real map, at real coordinates, moving while you
+are not looking.
+
+### Position is a pure function of the clock
+
+Nothing ticks. Nothing accumulates. Nothing is stored. Ask where a creature is at
+time *T* and the answer is computed from its seed and *T*, so it is the same
+answer on every device, after every reload, whether or not anybody was watching
+in between.
+
+Time is cut into **legs** of forty seconds. Each leg has a waypoint picked by a
+seeded random from inside the territory, and a position is the point between this
+leg's waypoint and the next one, eased in and out so a thing pauses where it
+arrives instead of cornering like a cursor. That follows the project's no-timers
+rule and buys three things a simulation loop would not: it moves while the phone
+is in a pocket, it cannot drift or double-step, and a test can ask where
+everything is at noon tomorrow, instantly.
+
+### It cannot leave
+
+**Every waypoint is inside the boundary, so containment is by construction** —
+not a collision test that has to be right on every step.
+
+Two waypoints inside a shape do not make a *path* inside it, though: cut across
+the inside corner of an L and both ends are in the shape while the middle of the
+walk is out in the street. A circle cannot do that, so drawn polygons get a
+**den** — one point per creature, picked once, that every other leg returns to,
+and a waypoint is only accepted if the den can see it in a straight line. The
+path is then inside the boundary for the same reason the waypoints are. It reads
+better too: a thing that keeps coming back to one spot has a home, and pacing out
+and back is what an animal with a territory does.
+
+### What holds them
+
+A **territory** is a polygon with a purpose, from one of two places:
+
+- **drawn** — a shape from the shape editor with its purpose set to *territory*.
+  Same tool, same polygon, same handles; only what it means differs. The form
+  then asks what lives there: creatures from a spawn table and how many, or a
+  named character with an icon and optionally a quest to hand out.
+- **derived** — a park with nothing drawn in it is quartered automatically, so
+  the feature works before anybody authors anything. How many live in each
+  quarter follows how much ground there is: one apiece in a forty-metre pocket
+  park, three by the time it is a hundred and fifty metres across. Anything drawn
+  inside a place wins outright — the quarters only fill a vacuum.
+
+Creatures are bound to their territory. Characters have a reach: **this patch**,
+**the whole place** (the park ring, not just the quarter), or **travelling**,
+which is what lets the tanner turn up at the market — a trip lasts several legs,
+so they stay somewhere long enough to be met rather than teleporting between
+parks every forty seconds.
+
+### Meeting them
+
+Nearby denizens are drawn as round pins — round on purpose, because every other
+pin on the map is a square-ish badge — and their territories as faint dashed
+outlines, on by default: a creature turning at an invisible line looks like a
+bug, and the same creature turning at a drawn edge looks like a territory. They
+are in the sidebar list with everything else, with the distance read from where
+they are *now*, which is a different number every time the list refreshes.
+
+Tapping a creature out of range tells you how close you need to get; in range it
+offers a fight, run as a throwaway combat node the way a dungeon stop is. Killing
+one takes it off the map for forty-five minutes — shorter than the three hours a
+generation lasts, so a patch you cleared is worth walking back to, and a creature
+you never killed is gone eventually anyway. The wood is not a fixed cast list.
+
+## Drawing your own buildings
+
+The fantasy town is real OSM geometry renamed and restyled — the right shape,
+but nobody's design. **`shapes.html`** is the other half: draw over the real
+map, and the game paints what you drew on top of the generated town.
+
+A shape is polygons and lines with a colour, a line width, a fill and a
+transparency. Click to drop points, double-click or Enter to finish. Select one
+and its vertices become handles you can drag; the ✥ in the middle moves the
+whole thing; ±10% resizes it and ±15° turns it, both about its own centre;
+right-click a vertex to drop it. Everything is stored as real coordinates, so a
+building sits on the ground you drew it on at every zoom rather than drifting
+when you pan.
+
+**Import footprints** is the thing that makes it bearable. Tracing a building
+by eye is miserable and the outlines are already surveyed, so it brings in every
+real building in view as an editable polygon — already the right shape, in the
+right place, wearing the fantasy name the atlas gave it. Restyle rather than
+trace. It reads the same cached map data the game uses, so it usually costs
+nothing, and it never imports the same footprint twice.
+
+**Its own file, on purpose.** Shapes live in their own table and export as one
+document (`stride-and-sword.shapes`) you can download, upload to a server of
+your own, or drop into `data/shapes.json` so every fresh install starts with it.
+Import merges by id, so re-importing your own export updates in place instead of
+duplicating. Nothing else in the game writes to that table.
+
+In the game they draw above the generated town — so a keep you drew sits over
+the footprint you traced it from — nearest ones only, ordered by their draw
+order, never intercepting a tap meant for the map, and hidden entirely when the
+fantasy overlay is off. A shape marked not visible stays in the file but off the
+map.
 
 ## Two zoom levels, because the map does two jobs
 
@@ -635,7 +867,7 @@ collapse into a ⋯ sheet instead of wrapping.
     cd tools
     npm install                  # playwright + leaflet, for the tests only
     npm run serve                # http://localhost:8000
-    npm test                     # 312 assertions, ~25 minutes
+    npm test                     # 390 assertions, ~34 minutes
 
 Edit a file and reload. There is no build step and nothing to regenerate — the
 files you edit are the files that get served, which is the point of the
@@ -653,10 +885,13 @@ for you, not for them.
 | `npm run test:editor` | 27 assertions: CRUD round-trips, rarity scaling staying derived, loot percentages measured over 4000 rolls, drop-count clamping, referential cleanup on delete, and authored monsters actually fighting and dropping in the game. |
 | `npm run test:map` | 33 assertions: placing, dragging, resizing and deleting locations, zone management, weighted spawn distribution over 6000 draws, opening hours including a window that wraps midnight, day gating, respawn timing, a location driving a real encounter and chest, the zoom presets following the game's settings, and the generated chunk zones staying out of the zone picker. |
 | `npm run test:responsive` | 31 assertions: both editors driven on an emulated iPhone (390×844, touch) and at 1440×900. Pane switching, the ⋯ sheet, card-view tables, placing a location by tapping the map, no sideways overflow, and no touch target under 40 px — including the zoom presets, which must not end up buried under another control, the dungeon layer switch, placing both a location and a dungeon by tap, and a refused placement leaving the button usable. |
-| `npm run test:dungeons` | 21 assertions: drawing and resizing a footprint, floors inheriting and reordering, rectangle geometry in metres, then a whole run walked in the game — entering, a real clicked fight, a chest, stepping out and picking it back up, the stairs down, and the cooldown at the bottom. |
+| `npm run test:dungeons` | 26 assertions: drawing and resizing a footprint, floors inheriting and reordering, rectangle geometry in metres, then a whole run walked in the game — entering, a real clicked fight, a chest, stepping out and picking it back up, the stairs down, and the cooldown at the bottom. Then the leash: anchored on the door, the warning band, the pause past the limit with nothing lost, metres not counting once you have left, and picking the run back up. |
 | `npm run test:instances` | 24 assertions: authoring a door and its levels, drawn lines squaring onto an axis, then inside — the floor being exactly the rectangle asked for with the drawn walls solid, everything on it reachable from the door by flood fill, the dial turning without moving you, pace, walls that stop you without refunding the walk, monsters that step only when you do and close when they see you, contact fights, chests, the boss holding the stairs, the level change, and the cooldown. |
 | `npm run test:spawning` | 26 assertions: parks and shops arriving in the Atlas as a third feature class, a park as a polygon and a cafe as a point, point-in-polygon, the category distribution over 6000 rolls, the contrast dial at 0 / 0.55 / 1, many buildings failing to outvote few parks, time windows including one that wraps midnight, out-of-hours staying pickable, the three-hour dungeon expiry and fifteen-minute gap, clearing, a dungeon you are standing in surviving its own expiry, hand-placed rows untouched, and on the region side: one or two rolled and then left alone for hours, lifetimes measured in days, a region rolling again once its days are up, the favoured categories winning without shutting the dull ones out, and nothing opening at your feet. The clock is injected, so none of it waits. |
 | `npm run test:chunks` | 28 assertions: the grid measured at four latitudes, keys round-tripping, only the cells in reach loaded; a chunk generating all at once and its neighbours with it, walking into a new one without disturbing the old, and coming back on the cache; sight — what is drawn as a `?`, what resolves as you approach, and what a `?` does when prodded; the three budgets — the hour, the cap oldest-first, the byte budget, and a swept chunk regenerating when you walk back; a dungeon per chunk with one zone row apiece; a chunk drawing a region's instance without creating or destroying it; and a chunk generating anyway with Overpass down, then snapping when the geometry arrives. Then the usage policy: no two requests in flight at once from four concurrent callers, none closer than the minimum gap, a 429 costing exactly one request to one host, nothing reaching the network during a cool-off, the cool-off surviving a reload, a dead service backing off per cell, the cache pruned to what we read without changing what digests out of it, and standing still asking for nothing. |
+| `npm run test:shapes` | 25 assertions: drawing a building and a line by clicking the map, the minimum point counts, dragging one vertex without disturbing the others, moving rigidly, resizing and rotating about the centroid, paint written through to the row and the style, removing vertices down to the floor; importing real footprints — named from the atlas, nothing under 6 m, nothing twice; the export document, re-importing your own export as a no-op, a foreign file merging alongside, hiding and deleting; and in the game: the file loading, near ones drawn and distant ones not, hidden ones skipped, none of them clickable, and all of them gone with the fantasy overlay off. Plus a phone check, because a map with no height looks exactly like a page that ignores clicks. |
+| `npm run test:quests` | 25 assertions: the picker offering surveyed places with their real outlines and a pin where it missed one, places keyed to the account, a role resolving to your place and falling back rather than failing; the boundary — the percentage shrinking about the middle, the floor stopping a small park collapsing, the park beating the floor, and forty points landing inside a real polygon; a whole run — a giver offering instead of fighting, the first step landing in your park, walk metres counting there and nowhere else, steps chaining, an answer branching and its flag being remembered, a line appearing only for the flag you have, the payout at the end; and the editor — the list, the form, the slider and box as one number, dialogue writing through, and four ways a broken quest is refused. |
+| `npm run test:denizens` | 23 assertions: a park quartered and the population following its size, a drawn territory taking over from the quarters; containment — eight creatures sampled four hundred times each across eight hours of clock with none outside, and four in a deliberately concave L where a bounding box would be no alibi; the clock — three looks at one instant agreeing, the same positions after a reload, real movement at walking pace and not vehicle pace, a leg boundary landing exactly on its waypoint, and a cast that is steady within a generation and rolled at the join; a character wandering its whole park but never leaving it and a traveller turning up at your other place; a kill that holds for forty-five minutes and then comes back, and a kill list that prunes itself; pins, list rows and the fight offered only in range; and the quest tally — the count saved on the character, a repeat counting again without counting twice, a deleted quest still nameable, and the sheet and log agreeing. |
 | `npm run test:permissions` | 18 assertions across four origins: no permission on `file://`, declining the gate, `http://localhost`, a LAN address, already granted. |
 | `npm run balance` | Simulates 400 fights per class/level/difficulty cell and prints win rates. Run it after touching any combat number. |
 | `npm run shots` | Screenshots into `tools/screenshots/` using the real Leaflet from `node_modules`. |

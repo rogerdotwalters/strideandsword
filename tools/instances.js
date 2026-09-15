@@ -592,6 +592,12 @@ const STAND_BY = (tx, ty, back) => {
       return fn(stairs.x, stairs.y, 3);
     }, STAND_BY.toString());
     if (!ok) throw new Error('could not line up on the stairs');
+    /* A monster may have wandered into contact while we were lining up, and
+       advance() refuses to move — or to descend — while a fight is open. End
+       any stray one first, or this measures the fight rather than the stairs. */
+    await g.evaluate(() => { if (SS.Game.inCombat) SS.Combat.end('won'); });
+    await g.waitForTimeout(200);
+    await clearModal(g);
     await g.evaluate(() => SS.Walk.add(2));
     await g.waitForTimeout(350);
     await clearModal(g);
@@ -612,6 +618,10 @@ const STAND_BY = (tx, ty, back) => {
   });
 
   await step('stepping out holds the run, and you can pick it back up', async () => {
+    // Same reason as above: a reward modal left open covers the button.
+    await g.evaluate(() => { if (SS.Game.inCombat) SS.Combat.end('won'); });
+    await g.waitForTimeout(200);
+    await clearModal(g);
     const at = await g.evaluate(() => {
       const r = SS.Instance.current(); return { x: +r.pos.x.toFixed(2), y: +r.pos.y.toFixed(2), level: r.level };
     });
@@ -649,6 +659,12 @@ const STAND_BY = (tx, ty, back) => {
       return fn(stairs.x, stairs.y, 3);
     }, STAND_BY.toString());
     if (!ok) throw new Error('could not line up on the stairs');
+    /* A monster may have wandered into contact while we were lining up, and
+       advance() refuses to move — or to descend — while a fight is open. End
+       any stray one first, or this measures the fight rather than the stairs. */
+    await g.evaluate(() => { if (SS.Game.inCombat) SS.Combat.end('won'); });
+    await g.waitForTimeout(200);
+    await clearModal(g);
     await g.evaluate(() => SS.Walk.add(2));
     await g.waitForTimeout(400);
     await clearModal(g);

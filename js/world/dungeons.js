@@ -95,6 +95,11 @@ const Dungeon = {
       floor: 0, walked: 0, stopIndex: 0,
       plan: [], status: "active",
       startedAt: nowTs(),
+      /* Where the door is. A run is leashed to it: you are supposed to be
+         *inside* this place, and the metres that carry you along its floor
+         should be metres walked around it, not a walk across town that happens
+         to be counted while the run is open. */
+      anchor: { latitude: +d.latitude, longitude: +d.longitude },
       totals: { fights: 0, chests: 0, floors: 0, experience: 0, gold: 0, meters: 0 }
     };
     run.plan = Content.planFloor(d, 0, run.seed);
@@ -118,11 +123,88 @@ const Dungeon = {
     const run = this.pausedFor(d.dungeonId);
     if (!run) return;
     run.status = "active";
+    // Re-anchor on the way in. A run paused by the leash is resumed from the
+    // door, and an old run from before the leash existed gets one now.
+    run.anchor = { latitude: +d.latitude, longitude: +d.longitude };
+    this._warnedLeash = false;
     this.saveRun(run);
     Game.renderDungeonBar();
     Game.drawDungeons();
     UI.toast("Back inside — " + Content.floorName(d, d.floors[run.floor], run.floor) +
              ", " + Math.round(run.walked) + " m in.", "good", 3600);
+  },
+
+  /* ------------------------------------------------------------- the leash
+
+     How far the door is, how far you are allowed, and what to do about it.
+     Wall-clock style: nothing is accumulated, it is recomputed from where you
+     are standing whenever the game already happens to look. */
+
+  leashM(d) {
+    return Math.max(60, +settings().dungeonLeashM || 250);
+  },
+
+  /** Metres from the door of the run you are in; null when not in one. */
+  strayM(run) {
+    run = run || this.current();
+    const p = Loc.last;
+    if (!run || !p) return null;
+    // A run begun before the leash existed has no anchor; fall back to the
+    // dungeon's own position rather than pretending it is infinitely far.
+    const a = run.anchor || (() => {
+      const d = this.def(run.dungeonId);
+      return d ? { latitude: +d.latitude, longitude: +d.longitude } : null;
+    })();
+    if (!a) return null;
+    return haversine(a.latitude, a.longitude, p.latitude, p.longitude);
+  },
+
+  /**
+   * Are we still where we should be? Returns what the bar and the caller need:
+   * the distance, the limit, and which band it falls in.
+   */
+  leashState(run) {
+    run = run || this.current();
+    if (!run) return null;
+    const d = this.def(run.dungeonId);
+    if (!d) return null;
+    const away = this.strayM(run);
+    if (away == null) return null;
+    const limit = this.leashM(d);
+    return {
+      away, limit,
+      warn: away >= limit * 0.7,
+      past: away >= limit,
+      left: Math.max(0, Math.round(limit - away))
+    };
+  },
+
+  /**
+   * Called from the position pipeline. Past the leash the run is paused — the
+   * same thing "Step out" does, so nothing is lost and walking back lets you
+   * pick it up where you left it.
+   */
+  checkLeash() {
+    const run = this.current();
+    if (!run) return null;
+    const st = this.leashState(run);
+    if (!st || !st.past) {
+      // Only nag once per trip out to the edge.
+      if (st && !st.warn) this._warnedLeash = false;
+      else if (st && st.warn && !this._warnedLeash) {
+        this._warnedLeash = true;
+        UI.toast("You're near the edge of this place — " + Math.round(st.away) +
+                 " m from the door. Go much further and you step out.", "bad", 4200);
+      }
+      return st;
+    }
+    this._warnedLeash = false;
+    const d = this.def(run.dungeonId);
+    this.leave(true);
+    UI.toast("You've walked too far from " + esc((d && d.name) || "the dungeon") +
+             " — " + Math.round(st.away) + " m. Your run is held; come back to pick it up.",
+             "bad", 6000);
+    return st;
   },
 
   /** Step out. The run keeps its place until you come back or start over. */
@@ -158,6 +240,15 @@ const Dungeon = {
     if (!run || !isFinite(meters) || meters <= 0) return;
     const d = this.def(run.dungeonId);
     if (!d) { this.abandon(true); return; }
+
+    /* The floor only advances while you are inside the leash, and that test
+       belongs here rather than only in the position pipeline: metres are
+       consumed on the walk event, which fires *before* the pipeline looks at
+       where you are. Without this a single long fix — a GPS jump, a car, a
+       dev teleport — would carry you hundreds of metres along the floor and
+       only then notice you had left. */
+    const leash = this.leashState(run);
+    if (leash && leash.past) { this.checkLeash(); return; }
 
     run.walked += meters;
     run.totals.meters += meters;
@@ -415,6 +506,7 @@ const Dungeon = {
         " · " + fmtDist(Content.dungeonLength(d)) + " of walking</span></div></div>" +
       '<div class="kv"><span>Distance</span><b>' + fmtDist(distance) + "</b></div>" +
       '<div class="kv"><span>Recommended</span><b>Level ' + (+d.minLevel || 1) + "+</b></div>" +
+      '<div class="kv"><span>Stay within</span><b>' + fmtDist(this.leashM(d)) + " of the door</b></div>" +
       (d.notes ? '<p class="tiny dim" style="margin:10px 0 0">' + esc(d.notes) + "</p>" : "");
 
     const buttons = [{ label: "Close", cls: "ghost" }];
@@ -434,8 +526,7 @@ const Dungeon = {
     } else {
       body += '<p class="tiny" style="color:var(--warn);margin:12px 0 0">' + esc(gate.why) + "</p>";
     }
-    UI.modal({ title: cap(kind.label), icon: kind.icon, body, buttons,
-               onClose: () => { Game._pendingDungeon = null; } });
+    UI.modal({ title: cap(kind.label), icon: kind.icon, body, buttons });
   }
 };
 

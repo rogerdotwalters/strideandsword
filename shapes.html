@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0e14">
+<title>Stride &amp; Sword — Shape Editor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/mapeditor.css">
+<link rel="stylesheet" href="css/shapes.css">
+</head>
+<body>
+<div id="se"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="js/core/util.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/api.js"></script>
+<script src="js/core/settings.js"></script>
+<script src="js/world/content.js"></script>
+<script src="js/world/atlas.js"></script>
+<script src="js/world/grid.js"></script>
+<!-- Chunks is here for one reason: importing real footprints goes through
+     Chunks.survey, which reads the same cache the game fills and obeys the
+     same Overpass rate limiting. Re-implementing that here would drift. -->
+<script src="js/world/chunks.js"></script>
+<script src="js/world/shapes.js"></script>
+<!-- The editor marks territories; Denizens owns what they mean. It is loaded
+     here only for its KINDS and ROAMS vocabularies. -->
+<script src="js/world/haunts.js"></script>
+<script src="js/world/denizens.js"></script>
+<script src="js/core/db.js"></script>
+<script src="js/shapes/app.js"></script>
+</body>
+</html>

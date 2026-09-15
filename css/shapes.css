@@ -1,0 +1,103 @@
+/* The shell. css/mapeditor.css styles `#me`; this page's root is `#se`, and
+   without the same rule the whole column has no height and the map renders
+   1100 x 0 — which looks like "clicking the map does nothing". */
+#se{position:fixed;inset:0;display:flex;flex-direction:column}
+
+/* ============================================================
+   SHAPE EDITOR — the bits the map editor's stylesheet does not
+   already carry. Everything else (shell, table, form, toasts)
+   is shared from css/mapeditor.css on purpose: two editors that
+   look different for no reason is worse than one file loaded twice.
+   ============================================================ */
+
+/* ---------- handles ----------
+   Big enough to grab with a finger, small enough not to hide the vertex
+   they represent. */
+.seVertex{
+  width:12px;height:12px;border-radius:50%;
+  background:var(--bg);border:2px solid var(--gold);
+  box-shadow:0 1px 5px rgba(0,0,0,.7);cursor:move;
+}
+.seVertex.draft{border-color:var(--ok);width:10px;height:10px}
+.seVertex.draft.first{border-color:var(--warn);width:13px;height:13px}
+.seMove{
+  width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+  background:var(--gold);color:#1a1206;font-size:12px;font-weight:700;
+  border:2px solid #1a1206;box-shadow:0 2px 7px rgba(0,0,0,.65);cursor:grab;
+}
+.seMove:active{cursor:grabbing}
+
+/* ---------- the count over the map ---------- */
+.seLegend{
+  position:absolute;left:10px;bottom:10px;z-index:500;
+  background:rgba(18,23,34,.92);border:1px solid var(--line);
+  border-radius:99px;padding:5px 12px;font-size:11px;color:var(--ink-3);
+  pointer-events:none;font-family:var(--mono);
+}
+.seLegend b{color:var(--ink-2)}
+
+/* ---------- paint ---------- */
+.swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:12px}
+.sw{
+  height:26px;border-radius:var(--r);border:2px solid var(--line-2);
+  cursor:pointer;padding:0;
+}
+.sw:hover{outline:2px solid var(--gold-dim);outline-offset:1px}
+.swDot{
+  display:inline-block;width:15px;height:15px;border-radius:4px;
+  border:2px solid var(--line-2);vertical-align:middle;
+}
+input[type=color].input{padding:2px;height:34px;cursor:pointer}
+.btnRow{display:flex;gap:6px;margin:12px 0}
+.btnRow .btn{flex:1;justify-content:center}
+
+/* ---------- the file dialog ----------
+   The map editor gets by on confirm() and toasts; this one has a file in and
+   a file out, which wants somewhere to explain itself. */
+.modalBack{
+  position:fixed;inset:0;z-index:950;background:rgba(6,8,12,.72);
+  display:grid;place-items:center;padding:20px;
+}
+.modalBox{
+  width:min(440px,100%);background:var(--bg-2);border:1px solid var(--line-2);
+  border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;
+}
+.modalHead{padding:13px 16px;border-bottom:1px solid var(--line)}
+.modalHead h3{font-size:15px}
+.modalBody{padding:14px 16px;max-height:60vh;overflow-y:auto}
+.modalBody p{margin:0 0 12px;line-height:1.6}
+.modalFoot{padding:11px 16px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+
+/* ---------- narrow screens ----------
+   The editor is a desktop tool — drawing a building on a phone with your thumb
+   is not a thing anybody wants — but it should be usable rather than broken.
+
+   The borrowed stylesheet has its own idea of narrow: below 900px it turns the
+   map editor into three absolutely-positioned panes switched by a bar at the
+   bottom, and hides every pane whose name is not on `body[data-pane]`. This
+   page has no such bar, so those rules would leave it with a zero-height map
+   and no form at all. Undo them for `#se` and stack instead — the id beats the
+   bare class, so this wins without !important. */
+@media (max-width:900px){
+  #se .meBody{position:static;flex-direction:column}
+  #se .meLeft,#se .meForm{
+    position:static;display:flex;width:auto;inset:auto;
+    border:0;flex:none;
+  }
+  #se .meLeft{flex-direction:column;flex:1 1 auto;min-height:280px}
+  #se .meForm{
+    display:block;border-top:1px solid var(--line);
+    padding:14px;max-height:42vh;overflow-y:auto;
+  }
+  #se .mapWrap{display:flex;flex:1 1 auto;min-height:200px}
+  #se .meTable{height:150px;flex:none}
+  #se .formActions{position:static;margin-top:16px;padding:13px 0 0;
+    background:none;box-shadow:none;border-top:1px solid var(--line)}
+  #se .formHead{position:static;margin:0 0 13px;padding:0;border-bottom:0}
+  #se .meStatus{display:none}
+  #se .meTop{height:auto;min-height:52px;flex-wrap:wrap;padding:8px 10px;gap:8px}
+  #se .meBrand{display:none}
+  #se #seSearch{flex:1 1 120px;width:auto;min-width:0}
+  .seLegend{display:none}
+  .swatches{grid-template-columns:repeat(4,1fr)}
+}
