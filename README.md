@@ -4,12 +4,13 @@ A location-based roguelike for walking around the office. Your phone's GPS moves
 your character; the real streets and buildings around you are redrawn as a
 fantasy town, and the interesting sites are a deliberate walk away.
 
-Four pages: the game, a content editor for its monsters, loot tables, items and
+Five pages: the game, a content editor for its monsters, loot tables, items and
 quests, a map editor for placing the locations, dungeons and instances it spawns
-from, and a shape editor for drawing your own fantasy buildings over the real
-map. Plain files — no framework, no bundler, no build step at all. The
-JavaScript is a tree of small files loaded with `<script src>`, and the game's
-starting data is a folder of JSON you can open and edit.
+from, a shape editor for drawing your own fantasy buildings over the real map,
+and a region editor for saying what the ground *is* — marsh, wood, field — and
+what lives on it. Plain files — no framework, no bundler, no build step at all.
+The JavaScript is a tree of small files loaded with `<script src>`, and the
+game's starting data is a folder of JSON you can open and edit.
 
 ---
 
@@ -86,11 +87,13 @@ failing silently — see the location gate and its **Show diagnostics** button.
     editor.html       the content editor
     mapeditor.html    the map editor
     shapes.html       the shape editor
+    regions.html      the region editor
     css/
       game.css        the game's styles
       editor.css      content editor
       mapeditor.css   map editor (the shape editor borrows this too)
       shapes.css      only what the shape editor adds to it
+      regions.css     only what the region editor adds to it
     js/
       core/
         util.js       helpers, geo maths, formatting
@@ -114,11 +117,14 @@ failing silently — see the location gate and its **Show diagnostics** button.
         chunks.js     the world filling in as you walk, and what it throws away
         zones.js      zones and procedural node scatter
         location.js   geolocation, distance accumulation, proximity
-        art.js        the PNGs that sit on the map
+        art.js        the PNGs that sit on the map, and the faces on everything
         shapes.js     hand-drawn buildings: the model, shared with the editor
+        regions.js    terrain regions: what the ground is, and what it spawns
+        kml.js        Google Earth exports (KML/KMZ) turned into GeoJSON
         haunts.js     your real places, and what they are in the world
         quests.js     quest definitions, runs, dialogue and flags
         denizens.js   things that move, and the boundaries that hold them
+        buildings.js  places on the map, and the people who work out of them
         placement.js  the scoring core: what goes where, and how often
         spawner.js    the lifecycle: what appears when, and what expires
         walk.js       the pedometer and the daily goal
@@ -130,6 +136,7 @@ failing silently — see the location gate and its **Show diagnostics** button.
         game.js       the game controller, map and HUD
         nodes.js      node interaction
         questui.js    the places picker, quest nodes on the map, dialogue
+        tradeui.js    buildings on the map, and doing business with a resident
         panels.js     character sheet, inventory, menu, settings
       dev/devpanel.js the dev-test panel
       boot.js         loads the database, then shows a screen
@@ -140,8 +147,11 @@ failing silently — see the location gate and its **Show diagnostics** button.
         app.js        map, table, and the location form
         dungeons.js   the dungeon layer: footprints, resizing, floors
         instances.js  the instance layer: doors and their levels
+        buildings.js  the building layer: points, outlines, residents
       shapes/app.js   the shape editor
+      regions/app.js  the region editor
     data/             the seeded database — see below
+    docs/             google-earth.md: how to name what you draw there
     art/              PNGs that locations can put on the map
     tools/            tests and tooling (not deployed)
 
@@ -151,7 +161,7 @@ visible to every file loaded after it. The order is written out in each HTML
 page, and it goes core → player → combat maths → world → UI → boot. If you add
 a file, add it to the page in the right place.
 
-Both editors reuse the same `core/` and `world/content.js` verbatim, which is
+Every editor reuses the same `core/` and `world/content.js` verbatim, which is
 what keeps them honestly in step with the game rather than reimplementing it.
 
 ## The seeded database
@@ -161,12 +171,14 @@ any editor:
 
     data/config.json      the rarity multipliers
     data/items.json       33 items
-    data/monsters.json    14 monsters
+    data/monsters.json    29 monsters, grouped by terrain
     data/loot.json        4 loot tables
-    data/spawns.json      4 spawn tables
+    data/spawns.json      12 spawn tables: one per terrain, plus three depth tiers
     data/locations.json   3 sample locations, one with a PNG
     data/dungeons.json    2 sample dungeons
     data/instances.json   2 sample instances
+    data/regions.json     terrain regions (empty until you import or draw some)
+    data/buildings.json   5 sample buildings and the people in them
     data/players.json     test logins — `tester` / `walk1234`
     data/spawn-rules.json the spawn weights — see below
     data/shapes.json      hand-drawn scenery — empty until you draw some
@@ -497,6 +509,69 @@ a position fix, and when the tab comes back to the front, rate-limited to about
 twice a minute. Nothing runs while nobody is watching, and the answer is the
 same either way because it is derived from the time rather than accumulated.
 
+## What you can wear
+
+Twelve slots, in the order a person puts them on:
+
+    main hand   off hand    helm     shoulders
+    chest       gloves      belt     legs
+    boots       back        neck     ring
+
+**A two-handed weapon takes both hands.** A greatsword, a great axe, a bow or a
+staff puts down whatever was in the off hand — out loud, in the toast, because a
+shield that vanishes silently is a bug report — and the off-hand slot then reads
+*held by both hands* until you swap back.
+
+### Weight is the class rule
+
+Every piece of armour is **light**, **medium** or **heavy**, and a class wears up
+to its own limit:
+
+| | wears | wields | off hand |
+|---|---|---|---|
+| Warrior | up to heavy | blade, axe, blunt, dagger, polearm, bow | shield, dagger, blade |
+| Rogue | up to medium | blade, dagger, bow, polearm | dagger, blade, shield |
+| Mage | light only | staff, wand, dagger, blunt | focus, wand, dagger |
+
+One rule covers every armour piece that will ever exist, present or authored
+later, instead of a list of classes on each item — and weapons are gated by
+**family**, so "swords" does not have to mean naming every sword. On top of that
+any piece can ask for an **attribute minimum** (plate wants STR 15 and CON 12, a
+wand wants INT 13), measured against your attributes *with your gear on*, so a
+ring of strength is a legitimate way into the breastplate. Requirements grow one
+point per five item levels.
+
+Refusals are sentences, not codes: *"Heavy armour is too heavy for a Mage."*,
+*"A Warrior was never taught the staff."*, *"Needs 15 STR."* The same sentence
+appears on the greyed-out row in your pack, on the disabled button's tooltip, and
+in the toast if you get there another way — one function answers all three, so
+they cannot disagree.
+
+An authored item can override any of it: its own weight, its own attribute
+minimums, a minimum level, or an explicit list of classes that beats the weight
+rules entirely. All of it is in the content editor's item form.
+
+### Why the numbers got smaller
+
+Eight armour slots where there used to be one would have made a fully-kitted
+character eight times as armoured as the win-rate table was measured against. So
+**every slot carries a share of the old single-piece budget** — chest 0.16, legs
+0.09, helm 0.07, down to 0.025 for a belt — and the shares add up to about one.
+A full kit is worth roughly what one good piece was; each individual piece is a
+small improvement, which is the shape a gear grind should have.
+
+Two more consequences, both deliberate:
+
+- **Attribute bonuses need rare, not uncommon.** Trinkets always carry one (they
+  have nothing else to offer), but at the old bar every one of twelve slots would
+  have handed out at least a point. Two trinkets are together worth about what
+  the single trinket was.
+- **Weapon damage came down.** Before class gating, a warrior's weapon was drawn
+  from every weapon in the game, wands included, and the table was measured
+  against that average. Now each class draws only from what it can wield, so the
+  families were scaled until the *allowed* pool averages what the ungated pool
+  did. `npm run balance` is what decided the numbers, not a guess.
+
 ## What's around you
 
 **Walking near something no longer opens it.** It used to: the first fix inside
@@ -515,6 +590,50 @@ The list shows what you can actually name: a site outside your 300 m sight is a
 `?` on the map, and listing it by name would hand you exactly what the `?`
 exists to withhold. It is open beside the map on a wide screen and a drawer on
 a phone, and it remembers which you chose.
+
+## Travelling
+
+A phone in a car walks at fifty miles an hour. Left alone that is about 1,600 XP
+an hour for sitting still, a chunk of the world generated every thirty seconds
+for ground nobody will ever set foot on, and an Overpass query for each one —
+which is precisely the traffic *Asking nicely* above promises not to make.
+
+So the game measures how fast you are going, and above walking pace it stops.
+
+**The measurement.** Every accepted fix produces a speed: the device's own
+`coords.speed` when it offers one — that is doppler off the GPS chip and beats
+anything derived — and otherwise the distance since the last fix over the time
+between them. Sample by sample that is noisy: one fix that jumps sixty metres
+sideways while you stand at a window reads as 25 mph. The number used for the
+decision is therefore the **median** of the last few samples inside a 25-second
+window. One bad fix cannot move a median; three in a row are not noise any more.
+
+**The threshold is two numbers, not one.** You are travelling once the median
+holds above **16 km/h** for six seconds, and walking again once it is under
+**8 km/h** for twelve. A single figure would flap on and off at every traffic
+light. Both are in Settings.
+
+**What "stops" means.** Everything:
+
+- metres stop counting, so no XP, no daily goal, no dungeon floor, no quest
+  walk step — and the credit is refused per *sample*, on that fix's own speed,
+  so the six seconds before the veil is certain are not six seconds of free XP
+- the tile layer comes off the map, because Leaflet has no pause and a layer on
+  a moving map fetches
+- chunk surveying stops dead: no cells generated, no Overpass queries
+- the site list, the spawner, proximity, quest nodes and denizens are all left
+  where they were
+
+**What you see** is a veil over the game — dimmed, blurred, **Traveling** in
+carved gold — with your speed under it in km/h and mph, and a line saying the
+road is passing without you. It sits below modals on purpose, so the menu still
+opens over it and the switch that turns it off is reachable while it is up. What
+you drove is not drawn as a walked trail, and when you slow down the world comes
+back once, where you actually got out, rather than for every cell in between.
+
+A simulated fix from the dev panel is a teleport, and a teleport is not a speed:
+dev testing never raises the veil. The panel has a **Drive** button for looking
+at it from a desk.
 
 ## Dungeons
 
@@ -766,6 +885,206 @@ one takes it off the map for forty-five minutes — shorter than the three hours
 generation lasts, so a patch you cleared is worth walking back to, and a creature
 you never killed is gone eventually anyway. The wood is not a fixed cast list.
 
+## Faces
+
+Every creature and character can carry a picture, and it is shown two ways.
+
+**On the map: a token.** A circle with a bevelled ring, the picture cropped
+square inside it. The ring colour is **difficulty**, green through amber to red,
+so the map answers "can I take that?" before you tap anything — and somebody who
+is not a fight at all (a trader, a quest giver) takes the friendly blue instead.
+Live combat and boss sites wear one too; caches, landmarks and cleared sites keep
+their square badge, because the shape of the pin is the difference between
+"something lives here" and "something is here".
+
+**Everywhere else: a portrait.** A framed rectangle showing the *whole* picture
+rather than a crop — in a fight, where the enemy carries a `Lv n` badge and you
+sit in the same frame beside your own bars; on the character sheet, the chip, the
+character picker; and on both panels for someone you meet on the road.
+
+**Nothing breaks without art.** Every face falls back to the emoji the game
+always had: no picture, a blank field, a path that 404s. A fresh install looks
+exactly as it did before.
+
+### Giving something a face
+
+| what | where |
+|---|---|
+| a monster | the content editor's monster form — it previews the token and the portrait side by side, because they crop differently |
+| your class | the content editor's new **Portraits** tab |
+| a character you drew | the shape editor, on a character territory |
+| a building's resident | the map editor's Buildings layer |
+
+Uploads are **redrawn at 256 px** before they are stored rather than merely
+refused for being big: a phone photo becomes tens of kilobytes, which is the
+difference between a portrait set that fits in this browser's storage and one
+that fills it. You can also point at a file under `art/` by path, exactly as
+location art already works.
+
+## Places, and the people in them
+
+A **building** is somewhere on the real map with somebody working out of it: a
+smithy on your corner, a store in the strip mall, an inn where the pub actually
+is. (Not to be confused with the shapes you draw in `shapes.html`, further down
+— a shape is a drawing, a building is a place.)
+
+### The building does not serve you
+
+There is no "enter shop" button and no panel on the structure. Every building
+puts **one person** into the living world, and that person is an ordinary
+denizen: their position is a pure function of the clock, they pace the ground
+around the building, and you trade with them wherever you catch them. Walk to
+the smithy at the wrong moment and the smith is round the back.
+
+Tapping the building tells you who works there and how far off they have
+wandered right now. Tapping *them*, once you are close enough, is where the
+trade is. A shop you can use from across the street is a menu, and this game is
+about walking to things.
+
+### Four things a person can do
+
+**Buy and sell.** Stock is derived, never stored: a building, a six-hour window
+and an index give one item, the same on every device and after every reload.
+What *is* written down is the short list of what has been carried away, so
+something you bought does not reappear on the shelf until the restock. Prices
+are marked up and then run through the same charisma curve as everything else.
+
+**Rest.** Food, a fire and a bed give back a share of each pool for a price.
+A character who needs nothing is not charged for it.
+
+**Improve gear.** There is no durability in this game, so "repair" would be a
+button with nothing to do. What a smith does instead is take a piece one level
+further, at the same scaling the generator used — and their own level is the
+ceiling, so a village smith cannot make you a legend's sword however much gold
+is on the counter. Rarity and requirements are left alone: a hammer does not
+make an iron sword legendary, and a piece you could already hold should not
+become unliftable for having been sharpened.
+
+**Talk.** The quest offer characters already had.
+
+### One dial
+
+A building's **level, 1–10**, decides all of it: a level 1 store is a cart with
+three things on it, a level 10 store stocks item level 20 and is worth walking
+across town for; a level 1 bed gives back 47% of each pool and a level 10 bed
+all of it; a level 3 smith stops at item level 9.
+
+### Authoring them
+
+The map editor has a fourth layer, **🏪 Buildings** — drop a point, set the kind
+and the level, tick what the resident does, and trace the real outline if you
+want the shape drawn. Unlike locations, dungeons and instances, buildings are
+**not tied to a zone**: a high street is not 500 m wide, so the layer lists
+every building you have, nearest first, and you can place one before any zone
+exists.
+
+Or draw them in Google Earth. A placemark named `building: Store level 3`
+arrives as a level 3 store; name a polygon the same way and its outline becomes
+the building's footprint. **`docs/google-earth.md`** is the whole naming scheme
+— what a pin, a line and a polygon each become, every word that names a kind or
+a terrain, and what to do when something does not arrive.
+
+## The ground decides what lives on it
+
+A generated world is the same everywhere: any monster that fits the difficulty
+can turn up on any site. That is fine for one office block and wrong for a
+county — a creek bottom should not hold what a hayfield holds.
+
+A **region** is a polygon with a terrain class. Stand inside one and encounters
+roll from that terrain's spawn table. Nothing else changes: the same sites are
+generated in the same places by the same rules, and only what is waiting on them
+differs. Eight classes, because this is a vocabulary the importer, the editor,
+the spawn tables and the player all have to share:
+
+| | | rolls from |
+|---|---|---|
+| 🌊 | River & lake | `sp_water` — Reed Nippers, Drowned Lanterns, a River Troll |
+| 🥾 | Marsh & fen | `sp_marsh` — Bog Leeches, Marsh Wisps, the Mire Hag |
+| 🌲 | Woodland | `sp_wood` — Thicket Boars, Bark Lurkers, Dire Wolves |
+| 🌾 | Meadow & park | `sp_meadow` — Meadow Sprites, Waylayers, a Pasture Wyvernling |
+| 🌱 | Open field | `sp_plain` — Rick Kobolds, Scarecrow Husks, Plains Ogres |
+| 🪨 | Rock & scarp | `sp_rock` — Scree Skitters, Quarry Golems, Cliffside Harpies |
+| ☠️ | Blighted | `sp_waste` — Ash Rats, Rust Wraiths, Blight Ghouls |
+| 🏘️ | Built-up | `sp_town` — Gutter Imps, Alley Cutpurses, Rooftop Stalkers |
+
+A region can name a different table, and carry a **difficulty nudge** for ground
+that is worse than it looks. Where two overlap, higher **priority** wins; on a
+tie the **smaller** one does, so a pond inside a park beats the park without
+anybody setting a number. Rings after the first are **holes** — an island in a
+lake, a dry knoll in a fen — and nothing spawns in them.
+
+### Its own page, and plain GeoJSON
+
+**`regions.html`** is the editor: draw, drag corners, cut holes, label, set the
+terrain and the table, filter the map to one class at a time. **Import terrain
+here** turns the real water and green cover in view into regions through the
+game's own cache and rate limiting.
+
+The file is a **GeoJSON FeatureCollection** — the format the rest of the world
+agrees on — so the same file opens in QGIS or geojson.io, and anything you
+produce there opens here. Coordinates are `[lng, lat]` on disk as the spec
+requires and `[lat, lng]` in memory as Leaflet requires, and exactly two
+functions know that.
+
+### Straight out of Google Earth
+
+Google Earth is the easiest polygon tool most people already have: draw over the
+satellite view, **Save Place As**, and drop the `.kml` or `.kmz` into the
+editor's Export / Import panel. It is also `npm run map -- --file survey.kml`
+if you would rather do it at the command line.
+
+- **Polygons become regions**, with Google Earth's inner boundaries as holes,
+  and a **MultiGeometry** split into one region per part.
+- **Folders and names classify the ground.** A placemark called *Black Fork
+  Creek* is water; anything in a folder called *Low ground* is marsh; *North
+  pasture* is meadow. The words are the ones people actually use — bottoms,
+  slough, swale, timber, hay, gravel pit — and whatever is left takes the
+  terrain you pick in the dialog. Turn it off with one checkbox.
+- **A traced path becomes a band of ground**, 20 m wide by default, because a
+  line has no inside and "am I in the creek" is the only question a region is
+  ever asked. Set the width, or skip paths entirely.
+- **Pins are counted and skipped** — a point is not an area — and the import
+  says how many it left behind.
+- **Re-importing an edited export updates the same regions** rather than laying
+  a second copy on top: KML carries no ids, so they are matched on where they
+  came from (the placemark's name and its position in the file).
+
+A `.kmz` is just a zip with a `.kml` inside it. The browser unzips it with
+`DecompressionStream` and node with `zlib`, so nothing here carries a zip
+library for one file.
+
+### A whole town at once
+
+```
+cd tools
+npm run map -- --place "Tyler, Texas"
+npm run map -- --bbox 32.25,-95.45,32.45,-95.15 --out ../data/regions.tyler.geojson
+```
+
+`tools/mapimport.js` asks Overpass for every piece of water and green cover in
+the box, classifies it, and writes the GeoJSON. It is a script rather than a
+button because it is a one-off job over a whole county — tens of megabytes and a
+couple of minutes of somebody else's server — and the phone must never make a
+request that size. It keeps the same manners as the app: one request at a time,
+two seconds apart, a real User-Agent, `Retry-After` honoured, and never a
+failover to a second endpoint after a 429.
+
+Things it does that are worth knowing:
+
+- **rivers drawn as lines become ground you can stand in**, buffered to a width
+  by type (24 m for a river, 8 m for a stream) — a line has no inside, and
+  "am I in the river" is the question the game actually asks
+- **lakes with islands keep their islands**, by assembling multipolygon
+  relations into outer rings and holes
+- **Douglas-Peucker in metres, not degrees**, or a north-south edge simplifies
+  nearly twice as hard as an east-west one and lakes come out with flat sides
+- buildings, roads and anything under 2,000 m² are dropped
+- `--file saved.json` runs the whole pipeline on a saved response, so it can be
+  re-run — and tested — without touching the network at all
+
+Soil class and flood zones are not in OpenStreetMap, which is the point of the
+editor: import what the map knows, then draw in what it does not.
+
 ## Drawing your own buildings
 
 The fantasy town is real OSM geometry renamed and restyled — the right shape,
@@ -852,6 +1171,24 @@ is sent straight to the **New zone here** button in the details pane — the
 toolbar's own copy of that button is desktop-only, so it was telling people to
 press something they could not see.
 
+**The map keeps its corner.** The map editor used to put four things on top of
+the map: Leaflet's +/− control, the two zoom presets stacked vertically, the
+hint bar and the place button. That is fine on a desktop and absurd on a phone
+held sideways, where the map is about 180 px tall and the controls alone were
+160 px of it. On a narrow screen they collapse into one 🗺️ button in the corner
+whose dropdown carries **Street**, **Walking** (ticked to show which you are in),
+**Zoom in**, **Zoom out** and **Back to *your zone***. Choosing a view closes the
+menu; the zoom steps leave it open, because nobody zooms in exactly once. It
+closes on a tap anywhere else, including the map, and is capped in height so it
+never runs under the pane switcher. Pinching still zooms as it always did, the
+floating **+ Place** button stays where it is, and the desktop keeps its presets
+out in the open — a control you can see and hit in one movement beats one behind
+a menu whenever there is room for it.
+
+A phone on its side also drops the toolbar's forced line break, so the zone
+picker, the search field and the ⋯ menu share one row: about 60 px of header
+instead of 125, which is a third of the screen handed back to the map.
+
 **Touch sizing is a separate axis from width.** Everything under
 `@media (pointer:coarse)` — buttons, the back arrow, sliders, checkbox labels —
 is at least 44 px, and every text input is 16 px so iOS doesn't zoom the page
@@ -867,7 +1204,7 @@ collapse into a ⋯ sheet instead of wrapping.
     cd tools
     npm install                  # playwright + leaflet, for the tests only
     npm run serve                # http://localhost:8000
-    npm test                     # 390 assertions, ~34 minutes
+    npm test                     # 526 assertions, ~48 minutes
 
 Edit a file and reload. There is no build step and nothing to regenerate — the
 files you edit are the files that get served, which is the point of the
@@ -883,8 +1220,9 @@ for you, not for them.
 |---|---|
 | `npm run test:game` | 104 assertions × 3 configurations: with the map, with Overpass unreachable, and with Leaflet itself blocked. Registration through combat, loot, levelling, the Atlas, persistence, the zoom presets and the tile fade. |
 | `npm run test:editor` | 27 assertions: CRUD round-trips, rarity scaling staying derived, loot percentages measured over 4000 rolls, drop-count clamping, referential cleanup on delete, and authored monsters actually fighting and dropping in the game. |
+| `npm run test:equipment` | 22 assertions: twelve slots with eight of them armour, every seeded item landing in a real one, the generator filling any slot you name, and a ring that does not push the amulet off; the two hands — a bow putting the shield back in the pack and saying so, the off hand refusing to fill while it is held; the gate — a warrior in plate and refused a staff, a mage in light only, an attribute minimum that lifts when a ring of strength takes you over it, an explicit class list beating the weight rules, and a greyed pack row whose dead button carries the reason; the budget — a full kit worth about what one unshared piece was, shares that sum to about one, attribute bonuses that did not multiply by twelve, and gear from before the paper doll still finding a slot; and the editor writing weight, attributes and classes through to what the game gates on. |
 | `npm run test:map` | 33 assertions: placing, dragging, resizing and deleting locations, zone management, weighted spawn distribution over 6000 draws, opening hours including a window that wraps midnight, day gating, respawn timing, a location driving a real encounter and chest, the zoom presets following the game's settings, and the generated chunk zones staying out of the zone picker. |
-| `npm run test:responsive` | 31 assertions: both editors driven on an emulated iPhone (390×844, touch) and at 1440×900. Pane switching, the ⋯ sheet, card-view tables, placing a location by tapping the map, no sideways overflow, and no touch target under 40 px — including the zoom presets, which must not end up buried under another control, the dungeon layer switch, placing both a location and a dungeon by tap, and a refused placement leaving the button usable. |
+| `npm run test:responsive` | 34 assertions: both editors driven on an emulated iPhone (390×844, touch) and at 1440×900. Pane switching, the ⋯ sheet, card-view tables, placing a location by tapping the map, no sideways overflow, and no touch target under 40 px — including the dungeon layer switch, placing both a location and a dungeon by tap, and a refused placement leaving the button usable. Then the map editor's phone controls: the preset stack and Leaflet's own zoom gone from the map surface, one thumb-sized button in their place, a dropdown that fits the screen and stops above the pane switcher, a preset that changes the zoom and closes it, zoom steps that leave it open, a tap on the map that dismisses it — and, at 1440 px, the presets still out in the open with no dropdown in sight. |
 | `npm run test:dungeons` | 26 assertions: drawing and resizing a footprint, floors inheriting and reordering, rectangle geometry in metres, then a whole run walked in the game — entering, a real clicked fight, a chest, stepping out and picking it back up, the stairs down, and the cooldown at the bottom. Then the leash: anchored on the door, the warning band, the pause past the limit with nothing lost, metres not counting once you have left, and picking the run back up. |
 | `npm run test:instances` | 24 assertions: authoring a door and its levels, drawn lines squaring onto an axis, then inside — the floor being exactly the rectangle asked for with the drawn walls solid, everything on it reachable from the door by flood fill, the dial turning without moving you, pace, walls that stop you without refunding the walk, monsters that step only when you do and close when they see you, contact fights, chests, the boss holding the stairs, the level change, and the cooldown. |
 | `npm run test:spawning` | 26 assertions: parks and shops arriving in the Atlas as a third feature class, a park as a polygon and a cafe as a point, point-in-polygon, the category distribution over 6000 rolls, the contrast dial at 0 / 0.55 / 1, many buildings failing to outvote few parks, time windows including one that wraps midnight, out-of-hours staying pickable, the three-hour dungeon expiry and fifteen-minute gap, clearing, a dungeon you are standing in surviving its own expiry, hand-placed rows untouched, and on the region side: one or two rolled and then left alone for hours, lifetimes measured in days, a region rolling again once its days are up, the favoured categories winning without shutting the dull ones out, and nothing opening at your feet. The clock is injected, so none of it waits. |
@@ -892,6 +1230,10 @@ for you, not for them.
 | `npm run test:shapes` | 25 assertions: drawing a building and a line by clicking the map, the minimum point counts, dragging one vertex without disturbing the others, moving rigidly, resizing and rotating about the centroid, paint written through to the row and the style, removing vertices down to the floor; importing real footprints — named from the atlas, nothing under 6 m, nothing twice; the export document, re-importing your own export as a no-op, a foreign file merging alongside, hiding and deleting; and in the game: the file loading, near ones drawn and distant ones not, hidden ones skipped, none of them clickable, and all of them gone with the fantasy overlay off. Plus a phone check, because a map with no height looks exactly like a page that ignores clicks. |
 | `npm run test:quests` | 25 assertions: the picker offering surveyed places with their real outlines and a pin where it missed one, places keyed to the account, a role resolving to your place and falling back rather than failing; the boundary — the percentage shrinking about the middle, the floor stopping a small park collapsing, the park beating the floor, and forty points landing inside a real polygon; a whole run — a giver offering instead of fighting, the first step landing in your park, walk metres counting there and nowhere else, steps chaining, an answer branching and its flag being remembered, a line appearing only for the flag you have, the payout at the end; and the editor — the list, the form, the slider and box as one number, dialogue writing through, and four ways a broken quest is refused. |
 | `npm run test:denizens` | 23 assertions: a park quartered and the population following its size, a drawn territory taking over from the quarters; containment — eight creatures sampled four hundred times each across eight hours of clock with none outside, and four in a deliberately concave L where a bounding box would be no alibi; the clock — three looks at one instant agreeing, the same positions after a reload, real movement at walking pace and not vehicle pace, a leg boundary landing exactly on its waypoint, and a cast that is steady within a generation and rolled at the join; a character wandering its whole park but never leaving it and a traveller turning up at your other place; a kill that holds for forty-five minutes and then comes back, and a kill list that prunes itself; pins, list rows and the fight offered only in range; and the quest tally — the count saved on the character, a repeat counting again without counting twice, a deleted quest still nameable, and the sheet and log agreeing. |
+| `npm run test:travel` | 15 assertions: a speed out of two fixes and a clock, the device's own doppler reading preferred over differencing, a single jumped fix that must not read as a car, and a dev-panel teleport that is never a speed at all; then the threshold — sustained pace rather than one fast sample, the veil and what it says, zero Overpass queries and no tile layer across 2.6 km of driving, nothing credited for it, and a 12 km/h crawl that does not end the drive; then getting out — tiles back, one survey for where you actually are, the drive not drawn as a walked trail, metres counting again, the menu switch turning the whole thing off, the dev panel's fake drive, and a reload that starts at a standstill. The clock is written into the fixes, so none of it waits. |
+| `npm run test:regions` | 39 assertions: the seeded content carrying nothing office-themed and every terrain's table resolving to real monsters; the geometry — a hole that is not inside, a hidden region that decides nothing, and the pond-beats-park tie-break; the game — forty rolls in a marsh that are all marsh, the same site off-region that is not, a per-region table override with a difficulty nudge, and a region naming a table nobody wrote falling through instead of producing an empty fight; the editor — drawing, cutting a hole by clicking inside, GeoJSON out in [lng,lat] with closed rings, a re-import that changes nothing, a foreign file whose lines and points are refused, a MultiPolygon split into one region per part, and importing the terrain here twice without doubling it; and the importer run against a canned Overpass response — buildings dropped, flowerbeds dropped, a river line buffered into standable ground, a lake keeping its island, one classifier shared with the browser, and simplification that keeps corners. Then a Google Earth export driven through the editor's own file picker: a .kml and a .kmz both becoming regions, coordinates landing in east Texas rather than the Indian Ocean, folders and names classifying the ground, an inner boundary staying a hole, a MultiGeometry split, a traced path given width, a pin dropped, a re-import that updates instead of doubling, the terrain picker and width obeyed, a shopping list refused with a sentence that says what the page accepts, and the CLI agreeing with the browser. |
+| `npm run test:buildings` | 38 assertions: the naming grammar out of Google Earth — `building: Store level 3` landing as a level 3 store, a kind leading instead of the word building, a trailing "…, tavern" dropped from the name, levels clamped, a creek and a "Note:" left as ground, and a smithy filed under a folder called Shops staying a smithy; the file — a pin becoming a building and a nameless one still skipped, a traced shopfront keeping its outline without also becoming a region, one real .kml dropped through the page's own file picker filling both tables, and a second drop updating rather than doubling; the person — one resident per building, named the same on every look, 300 clock samples with none outside their yard and movement on 299 of them, a card that says where they are now, trade buttons only in range and none at all on a stranger, and a shuttered building putting nobody on the street; the shelf — identical on two looks, different a window later, identical after a reload, gold taken and the row cleared on a purchase that survives a reload, an empty purse refused in words, an apothecary selling nothing but draughts; rest, and the smith's ceiling with the refusal naming it; and the editor — a fourth layer, a building placed with no zone at all, the form writing kind, level and trades through, and a traced outline moving the pin onto its middle. |
+| `npm run test:faces` | 19 assertions: the two components — a picture shown when there is one and the emoji when there is not, a 404 falling back rather than leaving a hole, a ring that interpolates and clamps and turns friendly-blue at zero, a 900 px upload redrawn to 256, and a text file refused in words; on the map — every creature wearing its own picture, the ring matching its own difficulty, a trader getting the friendly one, and a token in a map pin measured against its own size, because Leaflet resets `width:auto` on images in its marker pane and a portrait at natural size covers the whole map; in a fight — the enemy framed with a level badge and the right ring, your own class portrait beside the bars, a dead one greyed, and the class portrait still on the picker, the chip and the sheet after a reload; and authoring — three class cards, an upload stored shrunk and cleared again, a monster's form previewing both crops and saving through to the enemy you fight, and a hand-drawn character given a face in the shape editor. |
 | `npm run test:permissions` | 18 assertions across four origins: no permission on `file://`, declining the gate, `http://localhost`, a LAN address, already granted. |
 | `npm run balance` | Simulates 400 fights per class/level/difficulty cell and prints win rates. Run it after touching any combat number. |
 | `npm run shots` | Screenshots into `tools/screenshots/` using the real Leaflet from `node_modules`. |

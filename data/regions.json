@@ -1,0 +1,7 @@
+{
+  "type": "FeatureCollection",
+  "format": "stride-and-sword.regions",
+  "version": 1,
+  "note": "Terrain regions: polygons that decide what spawns on them. Plain GeoJSON — open it in QGIS or geojson.io, or draw in regions.html. Generate one for a real place with: cd tools && npm run map -- --place \"Tyler, Texas\"",
+  "features": []
+}

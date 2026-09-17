@@ -665,11 +665,22 @@ async function run(withLeaflet, withOverpass) {
     const before = await page.evaluate(() => {
       SS.Game.ch.equipment = [];
       SS.Game.ch.inventory = [];
-      const it = SS.Items.generate(10, 20, 8, 'weapon');
+      /* Roll until this character could actually hold it. A weapon is picked
+         from every family, and half of them are shut to any given class since
+         the paper doll landed — a staff in a warrior's pack greys the Equip
+         button, and clicking a disabled button is a thirty-second timeout
+         rather than an assertion. */
+      let it = null;
+      for (let i = 0; i < 40; i++) {
+        const roll = SS.Items.generate(10, 20, 8, 'weapon');
+        if (SS.Items.canEquip(SS.Game.ch, roll).ok) { it = roll; break; }
+      }
+      if (!it) return -1;
       it.stats.damage = 99; it.name = 'Test Blade';
       SS.Game.giveItem(it);
       return SS.Calc.attackPower(SS.Game.ch);
     });
+    if (before < 0) throw new Error('forty rolls and not one weapon this class could hold');
     await page.click('#btnBag');
     await page.waitForSelector('.modal', { timeout: 3000 });
     await page.click('.itemList .item .btn.primary');

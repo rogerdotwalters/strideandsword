@@ -170,6 +170,13 @@ const Denizens = {
       });
       if (!drawn) this.derivedZones(h).forEach(z => out.push(z));
     });
+    /* And one per building, last on purpose. A building is not a drawing, so
+       it must not suppress a park's automatic quarters the way a hand-drawn
+       zone does — and the loop above reads `out` as it goes, expecting shapes
+       it can take a centroid of. */
+    if (typeof Buildings !== "undefined") {
+      Buildings.territories(lat, lng, radiusM).forEach(z => out.push(z));
+    }
     return out;
   },
 
@@ -190,7 +197,14 @@ const Denizens = {
       const c = Shapes.centroid(zone);
       return { latitude: c.latitude, longitude: c.longitude };
     }
-    const d = Math.sqrt(rand()) * (+zone.radiusM || 50);
+    /* `walkRadiusM` is how far it *walks*, where `radiusM` is how big the
+       territory is. They are the same thing for everything drawn, and not for
+       a building: a 60 m yard means two waypoints up to 120 m apart, and a leg
+       is forty seconds, so the shopkeeper crossed their own yard at 3 m/s —
+       a jog. A territory that wants a believable pace declares the smaller
+       circle it actually paces. */
+    const r = +zone.walkRadiusM || +zone.radiusM || 50;
+    const d = Math.sqrt(rand()) * r;
     const p = projectPoint(zone.latitude, zone.longitude, d, rand() * 360);
     return { latitude: p.latitude, longitude: p.longitude };
   },
@@ -228,9 +242,15 @@ const Denizens = {
         roams: zone.roams || (kind === "character" ? "place" : "zone"),
         spawnTableId: zone.spawnTableId || "",
         questId: zone.questId || "",
+        /* Carried through from a building's territory: who they work for,
+           what they will do for you, and how good they are at it. Empty for
+           everything else, which is what the panels test. */
+        buildingId: zone.buildingId || "",
+        trades: zone.trades || [],
+        level: +zone.level || 0,
         // A difficulty band, so a patch feels like its own place.
         difficulty: clamp(Math.round(1 + rand() * 6 + (+zone.difficulty || 0)), 1, 10),
-        name: "", icon: ""
+        name: "", icon: "", portrait: ""
       };
       this.dress(d, rand);
       const p = this.positionAt(d, now);
@@ -247,6 +267,7 @@ const Denizens = {
       // different name every time the map redrew.
       d.name = d.zone.npcName || this.NPC_NAMES[Math.floor(rand() * this.NPC_NAMES.length)];
       d.icon = d.zone.npcIcon || "🧍";
+      d.portrait = d.zone.npcPortrait || "";
       return d;
     }
     let mon = null;
@@ -262,6 +283,8 @@ const Denizens = {
     d.monsterId = mon ? mon.monsterId : "";
     d.name = mon ? mon.name : "Something";
     d.icon = (mon && mon.icon) || "🐺";
+    // The picture, if whoever authored this monster drew one.
+    d.portrait = (mon && mon.portrait) || "";
     if (mon) d.difficulty = clamp(Math.round((+mon.levelMin + +mon.levelMax) / 2) || d.difficulty, 1, 10);
     return d;
   },

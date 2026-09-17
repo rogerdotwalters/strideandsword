@@ -32,11 +32,24 @@ const DEFAULT_SETTINGS = {
      a creature turning at an invisible line looks like a bug, and the same
      creature turning at a drawn edge looks like a territory. */
   showTerritories: true,
+  /* The terrain underneath — marsh, wood, field. Faint, and worth seeing:
+     "something from the fen attacked me" only makes sense if you can tell you
+     are standing in one. */
+  showRegions: true,
   /* How far a dungeon run may stray from its own door before it is paused.
      A dungeon is a place you are inside; walking half a mile away and still
      counting those metres as progress reads as a bug even though it was the
      original design. The warning starts at 70% of it. */
   dungeonLeashM: 250,
+  /* Above walking pace this stops being a walking game. A car covers a
+     kilometre a minute, which would be 250 XP a minute and a hundred Overpass
+     queries for ground nobody walked — so past a threshold the game stops
+     counting, stops asking the network for anything, and says so.
+     Two numbers rather than one, because a single one flickers: you have to
+     get up to the first to be travelling and down to the second to stop. */
+  travelVeil: true,          // the "Traveling" overlay at vehicle speed
+  travelEnterKph: 16,        // ~10 mph — faster than anyone jogs to a meeting
+  travelLeaveKph: 8,         // ~5 mph — a brisk walk, and you are back
   devMode: false,            // dev panel visibility (forced on in sim mode)
   highAccuracy: true,
   dailyGoalMeters: 3000,

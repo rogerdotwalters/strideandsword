@@ -21,7 +21,7 @@
         "spawnTableId": "sp_seed_shallow",
         "chests": 1,
         "chestTier": "wooden",
-        "chestLootTableId": "lt_seed_vermin",
+        "chestLootTableId": "lt_seed_scraps",
         "hasBoss": false,
         "bossSpawnTableId": "",
         "difficulty": 2,
@@ -36,7 +36,7 @@
         "spawnTableId": "sp_seed_middle",
         "chests": 1,
         "chestTier": "wooden",
-        "chestLootTableId": "lt_seed_office",
+        "chestLootTableId": "lt_seed_wayside",
         "hasBoss": true,
         "bossSpawnTableId": "sp_seed_boss",
         "difficulty": 4,
@@ -49,7 +49,7 @@
     "timeEnd": "",
     "days": [],
     "respawnMinutes": 180,
-    "notes": "It smells of standing water and something older."
+    "notes": "It drains something, and whatever it drains has teeth."
   },
   {
     "dungeonId": "dgn_seed_copse",
@@ -73,7 +73,7 @@
         "spawnTableId": "sp_seed_middle",
         "chests": 2,
         "chestTier": "wooden",
-        "chestLootTableId": "lt_seed_office",
+        "chestLootTableId": "lt_seed_wayside",
         "hasBoss": false,
         "bossSpawnTableId": "",
         "difficulty": 4,

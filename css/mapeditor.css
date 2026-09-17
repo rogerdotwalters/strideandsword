@@ -138,6 +138,16 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
   font-weight:700;display:grid;place-items:center;color:var(--ink-2)}
 .instMark.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
 .instMark.off{opacity:.5;filter:grayscale(.6)}
+/* Buildings. Square-ish rather than round, because a building is a building
+   and the round marks on this map are doors and people. */
+.bldMark{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:16px;
+  border:2px solid var(--line-2);background:var(--bg-3);box-shadow:var(--shadow);position:relative}
+.bldMark .d{position:absolute;right:-5px;bottom:-5px;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--bg-2);border:1px solid var(--line-2);font-size:9.5px;
+  font-weight:700;display:grid;place-items:center;color:var(--gold)}
+.bldMark.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
+.bldMark.off{opacity:.5;filter:grayscale(.6)}
+
 .instPrev{width:100%;height:100%;display:block}
 .instPrev .ph{fill:#141b28}
 .instPrev .pr{fill:#1c2637;stroke:#3a4661;stroke-width:.5}
@@ -175,6 +185,36 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
 .zmBtn.on{border-color:var(--gold-dim);color:var(--gold);
   background:linear-gradient(180deg,rgba(60,45,16,.96),rgba(30,24,12,.96))}
 .zmBtn.on .zmIc{filter:none}
+
+/* The phone's map controls: one button, one dropdown. Hidden on the desktop,
+   where the presets and Leaflet's own zoom have room to sit out in the open. */
+.mapTools{display:none;position:absolute;top:10px;right:10px;z-index:600}
+.mtBtn{display:inline-flex;align-items:center;gap:3px;min-height:44px;padding:0 11px;
+  border-radius:var(--r);border:1px solid var(--line-2);background:rgba(18,23,34,.96);
+  color:var(--ink-2);box-shadow:var(--shadow);font-size:17px;line-height:1;cursor:pointer}
+.mtBtn.on{border-color:var(--gold-dim);background:linear-gradient(180deg,rgba(60,45,16,.96),rgba(30,24,12,.96))}
+.mtCaret{font-size:10px;color:var(--ink-3)}
+.mapMenu{position:absolute;top:calc(100% + 6px);right:0;width:232px;max-width:calc(100vw - 20px);
+  background:var(--bg-2);border:1px solid var(--line-2);border-radius:12px;
+  box-shadow:0 12px 34px rgba(0,0,0,.6);padding:6px;
+  /* Landscape on a phone leaves about 180 px of map. The subtraction is the
+     header, this button and the pane switcher, so the menu always stops above
+     the switcher instead of running underneath it. */
+  max-height:calc(100vh - 248px);overflow-y:auto;overscroll-behavior:contain}
+.mapMenu.hidden{display:none}
+.mmHead,.mmFoot{padding:6px 9px;font-size:10px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--ink-3);font-weight:700}
+.mmFoot{text-transform:none;letter-spacing:0;text-align:right;color:var(--ink-3);opacity:.7}
+.mmSep{height:1px;background:var(--line);margin:5px 4px}
+.mmRow{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 9px;
+  border:0;border-radius:9px;background:transparent;color:var(--ink-2);text-align:left;
+  font-size:13.5px;font-weight:600;cursor:pointer}
+.mmRow:hover,.mmRow:active{background:var(--bg-3)}
+.mmRow.on{color:var(--gold);background:rgba(224,163,62,.08)}
+.mmIc{width:22px;font-size:15px;text-align:center;line-height:1}
+.mmLb{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.mmNote{font-size:10.5px;font-weight:500;color:var(--ink-3)}
+.mmTick{color:var(--gold);font-size:13px}
 
 /* ---------- form ---------- */
 .formHead{display:flex;align-items:center;gap:10px;margin-bottom:13px}
@@ -275,8 +315,33 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
     background:var(--bg-2);border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.4)}
   .meStatus{display:none}
   .mapHint{top:auto;bottom:76px;font-size:12px}
+
+  /* The map's own corner, reclaimed. The preset stack and Leaflet's zoom
+     buttons were 98 px and 64 px of controls standing on a map that is only
+     about 180 px tall in landscape; both live in the dropdown now, and
+     pinching still zooms the way it always did. */
+  /* Scoped to #me: the shape editor borrows this stylesheet and has neither a
+     preset stack nor a dropdown to replace one, so it keeps Leaflet's own
+     zoom buttons. */
+  #me .zoomModes{display:none}
+  #me .leaflet-control-zoom{display:none}
+  #me .mapTools{display:block}
+  /* The attribution runs under the place button at this width, so it shrinks
+     rather than sitting half-hidden behind it. */
+  #me .leaflet-control-attribution{font-size:9px;max-width:58vw}
   .meTableBar{flex-wrap:wrap;gap:6px}
   .row3{grid-template-columns:1fr 1fr}
+}
+
+/* A phone on its side: 360 px of screen, and the header was taking a third of
+   it as two rows. There is width going spare here, so the forced break comes
+   out and zone, search and menu share one row. */
+@media (max-width:900px) and (min-width:560px) and (max-height:520px){
+  #me .meTop{flex-wrap:nowrap;padding:6px 10px}
+  #me .meBreak{display:none}
+  #me .meTop select{flex:1 1 40%}
+  #meSearch{flex:1 1 30%;min-width:110px}
+  .mapMenu{max-height:calc(100vh - 188px)}
 }
 
 /* Tables become cards on a phone; each cell labels itself from data-l. */
@@ -313,7 +378,14 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
   table.grid tbody tr{min-height:44px}
   .locPin{width:38px;height:38px;font-size:18px}
   .locPin.boss{width:46px;height:46px;font-size:22px}
-  .layerSwitch button{min-height:44px;padding:0 15px;font-size:12.5px}
+  /* Four layers do not fit across a phone — the strip came to 461 px on a
+     390 px screen and pushed the whole table pane sideways. It scrolls inside
+     its own border instead, so the buttons stay thumb-sized and nothing else
+     moves. `max-width` is the half that matters: without it the box is still
+     461 px wide and it is the box that overflows, not its contents. */
+  .meTableBar .layerSwitch{flex:1 1 100%;max-width:100%;overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch}
+  .layerSwitch button{min-height:44px;padding:0 13px;font-size:12.5px;flex:0 0 auto;white-space:nowrap}
   .radiusRow input[type=range]{height:44px}
   .instMark{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:17px;
   border:2px solid var(--line-2);background:var(--bg-3);box-shadow:var(--shadow);position:relative}
@@ -322,6 +394,16 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
   font-weight:700;display:grid;place-items:center;color:var(--ink-2)}
 .instMark.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
 .instMark.off{opacity:.5;filter:grayscale(.6)}
+/* Buildings. Square-ish rather than round, because a building is a building
+   and the round marks on this map are doors and people. */
+.bldMark{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:16px;
+  border:2px solid var(--line-2);background:var(--bg-3);box-shadow:var(--shadow);position:relative}
+.bldMark .d{position:absolute;right:-5px;bottom:-5px;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--bg-2);border:1px solid var(--line-2);font-size:9.5px;
+  font-weight:700;display:grid;place-items:center;color:var(--gold)}
+.bldMark.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(224,163,62,.25),var(--shadow)}
+.bldMark.off{opacity:.5;filter:grayscale(.6)}
+
 .instPrev{width:100%;height:100%;display:block}
 .instPrev .ph{fill:#141b28}
 .instPrev .pr{fill:#1c2637;stroke:#3a4661;stroke-width:.5}
@@ -352,3 +434,101 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
   background:rgba(224,163,62,.16);color:var(--gold,#e0a33e);
   border:1px solid rgba(224,163,62,.35);vertical-align:middle;
 }
+
+/* Same copy, same reason — see css/editor.css. */
+
+/* ---------- 7c. Faces: tokens on the map, portraits in the panels ----------
+
+   One creature, two presentations. A **token** is a circle with a coloured
+   ring for the map, where it is a dot among other dots and has to read at
+   34 px. A **portrait** is a framed rectangle showing the whole picture, for
+   the combat screen and the panels, where there is room to look at it.
+
+   The ring colour is difficulty, 1–10, green through amber to red — set by
+   `Art.difficultyColor` as `--ring`. Zero means it is not a fight and takes
+   the blue everything friendly uses.
+
+   The bevel is three shadows, and the order matters: a drop shadow underneath
+   the whole thing, a light inset along the top of the ring and a dark one
+   along its bottom (so the ring reads as a raised bezel), then the opposite
+   pair inside the well (so the picture reads as set *into* it). Flat colour
+   with a border looked like a sticker; this looks like a coin. */
+
+.tok{
+  --tokSize:34px;
+  --ring:#4a8fd4;
+  width:var(--tokSize);height:var(--tokSize);border-radius:50%;
+  padding:2.5px;box-sizing:border-box;flex:none;position:relative;
+  background:
+    radial-gradient(circle at 50% 18%,rgba(255,255,255,.4),rgba(255,255,255,0) 58%),
+    linear-gradient(165deg,var(--ring),rgba(0,0,0,.62) 86%);
+  box-shadow:
+    0 3px 9px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.45),
+    inset 0 -1.5px 1px rgba(0,0,0,.55);
+  transition:transform .2s ease,box-shadow .2s ease;
+}
+.tok .tokIn{
+  width:100%;height:100%;border-radius:50%;overflow:hidden;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(circle at 50% 22%,#26334a,#141b28 78%),
+    #141b28;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.7),inset 0 -2px 3px rgba(255,255,255,.07);
+}
+/* Leaflet resets `width:auto` on every img inside its marker pane — a fix for
+   tiles in Firefox — with a selector more specific than this one, so a
+   portrait in a map pin came out at its natural 256 px and swamped the map.
+   Hence the shouting, for the same reason `.pinWrap` shouts. */
+.tok img{width:100%!important;height:100%!important;object-fit:cover;display:block}
+.tok .em{font-size:calc(var(--tokSize) * .48);line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+.tok .tokBadge{
+  position:absolute;right:-3px;bottom:-3px;min-width:15px;height:15px;padding:0 3px;
+  border-radius:8px;background:#141b28;border:1px solid var(--ring);
+  font-family:var(--mono);font-size:9px;font-weight:700;color:var(--ink);
+  display:grid;place-items:center;line-height:1;
+}
+.tok.inrange{
+  transform:scale(1.1);
+  box-shadow:
+    0 0 0 4px rgba(84,179,122,.2),0 3px 9px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1.5px 1px rgba(0,0,0,.55);
+}
+.tok.dead{opacity:.4;filter:grayscale(1)}
+
+.port{
+  --portW:56px;--portH:70px;
+  --ring:#4a8fd4;
+  width:var(--portW);height:var(--portH);flex:none;position:relative;
+  border-radius:11px;padding:2.5px;box-sizing:border-box;
+  background:
+    radial-gradient(120% 60% at 50% 0%,rgba(255,255,255,.34),rgba(255,255,255,0) 62%),
+    linear-gradient(165deg,var(--ring),rgba(0,0,0,.62) 88%);
+  box-shadow:
+    0 4px 12px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,255,255,.4),
+    inset 0 -1.5px 1px rgba(0,0,0,.5);
+}
+.port .portIn{
+  width:100%;height:100%;border-radius:9px;overflow:hidden;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(90% 70% at 50% 14%,#243046,#10151f 76%),
+    #10151f;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.72),inset 0 -2px 3px rgba(255,255,255,.06);
+}
+/* `contain`, not `cover`: this is the view where the whole picture is meant
+   to be visible. Cropping it into a square is what the token is for. */
+.port img{width:100%!important;height:100%!important;object-fit:contain;display:block}
+.port .em{font-size:calc(var(--portW) * .5);line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
+.port .portBadge{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:-7px;
+  padding:1px 7px;border-radius:8px;background:#141b28;border:1px solid var(--ring);
+  font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--ink);white-space:nowrap;
+}
+.port.dead{opacity:.38;filter:grayscale(1)}
+
+/* Portrait previews in a form (the shape editor's characters, a building's
+   resident). Same two rules as css/editor.css. */
+.portRow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 11px}
+.portActs{display:flex;gap:7px;align-items:center;flex-wrap:wrap}

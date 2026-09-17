@@ -1,0 +1,103 @@
+{
+  "type": "FeatureCollection",
+  "format": "stride-and-sword.buildings",
+  "version": 1,
+  "note": "Places on the map and the people who work out of them. Coordinates are [lng, lat] as GeoJSON requires; the game reads them back as [lat, lng]. These sample rows carry placeholder coordinates and are shifted to wherever you first play, exactly like the sample locations.",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "bld_seed_store",
+      "properties": {
+        "feature": "building",
+        "name": "Thurlow's Provisions",
+        "kind": "store",
+        "level": 2,
+        "radius": 45,
+        "residentName": "",
+        "trades": ["goods"],
+        "notes": "Whatever the carts brought in. Prices are what they are.",
+        "source": "seed",
+        "sourceId": "seed/store",
+        "active": true
+      },
+      "geometry": { "type": "Point", "coordinates": [-87.62335, 41.88255] }
+    },
+    {
+      "type": "Feature",
+      "id": "bld_seed_tavern",
+      "properties": {
+        "feature": "building",
+        "name": "The Gilded Flask",
+        "kind": "tavern",
+        "level": 3,
+        "radius": 55,
+        "trades": ["rest", "talk"],
+        "notes": "A fire, a bed and a great deal of opinion.",
+        "source": "seed",
+        "sourceId": "seed/tavern",
+        "active": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-87.62285, 41.88300],
+          [-87.62255, 41.88300],
+          [-87.62255, 41.88282],
+          [-87.62285, 41.88282],
+          [-87.62285, 41.88300]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "bld_seed_smithy",
+      "properties": {
+        "feature": "building",
+        "name": "Ash & Ember",
+        "kind": "smithy",
+        "level": 3,
+        "radius": 40,
+        "trades": ["mend", "goods"],
+        "notes": "Takes a piece one level further, and no further than that.",
+        "source": "seed",
+        "sourceId": "seed/smithy",
+        "active": true
+      },
+      "geometry": { "type": "Point", "coordinates": [-87.62195, 41.88245] }
+    },
+    {
+      "type": "Feature",
+      "id": "bld_seed_apothecary",
+      "properties": {
+        "feature": "building",
+        "name": "The Green Retort",
+        "kind": "apothecary",
+        "level": 2,
+        "radius": 38,
+        "trades": ["goods", "rest"],
+        "notes": "Draughts, salves, and an unsettling smell.",
+        "source": "seed",
+        "sourceId": "seed/apothecary",
+        "active": true
+      },
+      "geometry": { "type": "Point", "coordinates": [-87.62410, 41.88205] }
+    },
+    {
+      "type": "Feature",
+      "id": "bld_seed_temple",
+      "properties": {
+        "feature": "building",
+        "name": "The Quiet House",
+        "kind": "temple",
+        "level": 4,
+        "radius": 60,
+        "trades": ["rest", "talk"],
+        "notes": "Open to anybody who walked far enough to need it.",
+        "source": "seed",
+        "sourceId": "seed/temple",
+        "active": true
+      },
+      "geometry": { "type": "Point", "coordinates": [-87.62150, 41.88325] }
+    }
+  ]
+}

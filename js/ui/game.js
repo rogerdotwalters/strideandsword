@@ -44,7 +44,7 @@ const Game = {
       '<div class="instHint hidden" id="instHint"></div>' +
       '<div class="topBar">' +
         '<div class="charChip">' +
-          '<div class="avatar" id="chAvatar"></div>' +
+          '<div class="chFace" id="chAvatar"></div>' +
           '<div class="who"><b id="chName"></b><span id="chSub"></span></div>' +
         "</div>" +
         '<div class="spacer"></div>' +
@@ -65,6 +65,10 @@ const Game = {
       "</aside>" +
       // Directly after the dev panel so CSS can slide it aside when that opens.
       '<div id="devPanel" class="hidden"></div>' +
+      /* The veil that says you are in a car. Built empty and filled by
+         renderTravel, because it is the one thing that has to be right the
+         instant the state flips rather than on the next redraw. */
+      '<div id="travelVeil" class="hidden" aria-live="polite"></div>' +
       '<div class="zoomModes hidden" id="zoomModes"></div>' +
       '<div class="bars">' +
         '<div class="modeRow" id="modeRow">' +
@@ -172,6 +176,9 @@ const Game = {
                    'target="_blank" rel="noopener">OpenStreetMap</a> contributors'
     }).addTo(this.map);
 
+    /* Regions go on first and stay at the bottom: they are the ground, and
+       everything else stands on it. */
+    this.regionLayer = L.layerGroup().addTo(this.map);  // the terrain underneath
     this.worldLayer = L.layerGroup().addTo(this.map);   // fantasy roads + buildings
     this.shapeLayer = L.layerGroup().addTo(this.map);   // buildings you drew yourself
     this.trail = L.polyline([], { color: "#4a8fd4", weight: 3, opacity: .5, dashArray: "4 6" }).addTo(this.map);
@@ -364,6 +371,10 @@ const Game = {
   async syncChunks(opts) {
     opts = opts || {};
     if (this._chunkBusy || !Loc.last || typeof Chunks === "undefined") return 0;
+    /* Not a metre of this is ground anybody walked. A survey per 500 m cell at
+       50 km/h is a query every thirty-six seconds for a map nobody is looking
+       at — see claude/osm-policy.md, which this would make a liar of. */
+    if (Loc.pausing()) return 0;
     const now = opts.now || Date.now();
     if (!opts.force && this._lastChunkSync && now - this._lastChunkSync < 20000) return 0;
     this._chunkBusy = true;
@@ -383,6 +394,7 @@ const Game = {
           this.world = Chunks.mergedWorld();
           this.renderWorld(this.world);
           this.drawShapes();
+          this.drawRegions();
           this.nodes = this.visibleNodes();
           this.drawNodes();
         }
@@ -409,6 +421,7 @@ const Game = {
       this.snapNodesToBuildings(this.world);
     }
     this.drawShapes();
+    this.drawRegions();
     this.applyZoomDetail();
 
     this.nodes = this.visibleNodes();
@@ -419,6 +432,7 @@ const Game = {
     this.drawInstanceDoors();
     this.drawQuestNodes();
     this.drawDenizens();
+    this.drawBuildings();
     this.renderSiteList(true);
     this.refreshDevReadout();
     return r.changed;
@@ -491,6 +505,7 @@ const Game = {
       this.drawShapes();
       this.drawQuestNodes();
       this.drawDenizens();
+      this.drawBuildings();
     }
     this.renderDungeonBar();
     if (!Instance.current()) this.renderInstanceBar();
@@ -639,6 +654,42 @@ const Game = {
       this.shapeLayer.addLayer(layer);
     });
     return rows.length;
+  },
+
+  /**
+   * The ground you are standing on.
+   *
+   * Faint, underneath everything, and non-interactive: a region is not a thing
+   * to tap, it is the reason the thing you tapped had teeth. Drawn at all
+   * because "a marsh creature appeared" reads as a bug unless you can see that
+   * you are standing in a marsh — the same argument the territory outlines
+   * won in js/world/denizens.js.
+   *
+   * Leaflet is given [lat,lng] rings including the holes, which is exactly the
+   * shape L.polygon wants: first ring outline, the rest cut out of it.
+   */
+  drawRegions() {
+    if (this.mapless || !this.regionLayer || typeof Regions === "undefined") return 0;
+    this.regionLayer.clearLayers();
+    const p = Loc.last;
+    if (!p || settings().showRegions === false) return 0;
+    const rows = Regions.near(p.latitude, p.longitude, this.drawRangeM() + 400);
+    rows.forEach(r => {
+      const rings = Regions.rings(r);
+      if (!rings.length || rings[0].length < 3) return;
+      this.regionLayer.addLayer(L.polygon(rings, Regions.styleOf(r)));
+    });
+    this._regionHere = Regions.at(p.latitude, p.longitude);
+    return rows.length;
+  },
+
+  /** What the ground under your feet is called, for the HUD and the sheet. */
+  terrainHere() {
+    if (typeof Regions === "undefined" || !Loc.last) return null;
+    const r = Regions.at(Loc.last.latitude, Loc.last.longitude);
+    if (!r) return null;
+    const t = Regions.terrain(r.terrain);
+    return { region: r, terrain: t, label: t.icon + " " + r.name };
   },
 
   renderWorld(world) {
@@ -924,10 +975,31 @@ const Game = {
           key: "z:" + d.denizenId, kind: "denizen", icon: d.icon,
           name: d.name, distance: dist, range: s.interactRange,
           inRange: dist <= s.interactRange, done: false,
-          note: d.kind === "character"
+          note: d.buildingId && typeof Buildings !== "undefined"
+            ? (d.trades || []).map(t => Buildings.TRADES[t].verb.toLowerCase()).join(", ") +
+              " · " + (d.zone.name || "somewhere")
+            : d.kind === "character"
             ? (d.questId ? "has work for you" : "wandering")
             : "difficulty " + d.difficulty + " · " + (d.zone.name || "its patch"),
           open: () => this.openDenizen(d)
+        });
+      });
+    }
+
+    /* Buildings. The row is the *structure*, not the trade — tapping it tells
+       you who works there and how far off they have wandered. Trading is one
+       more tap, on the person, once you have caught them. */
+    if (typeof Buildings !== "undefined") {
+      (this._buildings || []).forEach(b => {
+        const dist = Buildings.distanceTo(b, p.latitude, p.longitude);
+        const k = Buildings.kind(b.kind);
+        out.push({
+          key: "b:" + b.buildingId, kind: "building", icon: k.icon,
+          name: b.name || cap(k.label), distance: dist,
+          range: +b.radius || 45, inRange: Buildings.contains(b, p.latitude, p.longitude),
+          done: false,
+          note: cap(k.label) + " · level " + Buildings.levelOf(b),
+          open: () => this.openBuilding(b)
         });
       });
     }
@@ -985,11 +1057,22 @@ const Game = {
     }
     this._siteSig = sig;
 
+    /* What ground this is, above the list of what is on it. Only when a region
+       is actually drawn here: "Built-up" over every street in the world would
+       be noise, not information. */
+    const here = this.terrainHere();
+    const ground = here
+      ? '<div class="slGround" title="' + esc(here.terrain.blurb) + '">' +
+          '<span class="slIco">' + here.terrain.icon + "</span>" +
+          '<span class="slText"><b>' + esc(here.region.name) + "</b>" +
+            '<span class="slNote">' + esc(here.terrain.name) + "</span></span></div>"
+      : "";
+
     if (!rows.length) {
-      host.innerHTML = '<div class="slEmpty">Nothing within reach yet. Walk a little.</div>';
+      host.innerHTML = ground + '<div class="slEmpty">Nothing within reach yet. Walk a little.</div>';
       return;
     }
-    host.innerHTML = rows.map(r =>
+    host.innerHTML = ground + rows.map(r =>
       '<button class="slRow' + (r.inRange ? " near" : " far") + (r.done ? " done" : "") +
         '" data-site="' + esc(r.key) + '">' +
         '<span class="slIco">' + r.icon + "</span>" +
@@ -1066,15 +1149,27 @@ const Game = {
 
   nodeIcon(n) {
     const cleared = n.status === "cleared";
-    const html =
-      '<div class="pin ' + n.type + (cleared ? " cleared" : "") + (n.closed ? " closed" : "") +
+    /* Somewhere with something waiting on it gets the same circular token a
+       creature does — it is, after all, a creature you are being shown. A
+       cache, a landmark or a cleared site is a *place*, and keeps the square
+       badge it has always had: the shape of the pin is the difference between
+       "something lives here" and "something is here". */
+    const fight = (n.type === "combat" || n.type === "boss") && !cleared && !n.closed;
+    const size = n.type === "boss" ? 42 : 34;
+    const html = fight
+      ? Art.tokenHtml({
+          image: n.portrait, icon: n.icon, size,
+          difficulty: n.difficulty, badge: n.difficulty,
+          cls: "site " + n.type, data: { key: "node", value: n.nodeId }
+        })
+      : '<div class="pin ' + n.type + (cleared ? " cleared" : "") + (n.closed ? " closed" : "") +
         '" data-node="' + n.nodeId + '" title="' + (n.closed ? "Closed right now" : "") + '">' +
         (cleared ? "✓" : n.closed ? "🕒" : n.icon) +
         (n.type !== "landmark" && !cleared ? '<span class="diff">' + n.difficulty + "</span>" : "") +
       "</div>";
     return L.divIcon({ html, className: "pinWrap",
-      iconSize: [n.type === "boss" ? 42 : 34, n.type === "boss" ? 42 : 34],
-      iconAnchor: [n.type === "boss" ? 21 : 17, n.type === "boss" ? 21 : 17] });
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2] });
   },
 
   /* Out of sight: you know something is there, not what. The generated world
@@ -1111,9 +1206,82 @@ const Game = {
   },
 
   /* ---- Position pipeline ---- */
+  /* ---- Travelling ----------------------------------------------------
+     Above walking pace the game stops. Not just the scoring: the map stops
+     asking for tiles and the world stops surveying, because a car crossing
+     town would otherwise walk the chunk grid at a kilometre a minute and fire
+     an Overpass query for every cell of ground nobody set foot on. That is
+     exactly the traffic the usage policy asks us not to make, and none of it
+     buys the player anything — they are not going to walk into any of it.
+
+     Everything resumes on the far side, from wherever you got out. */
+
+  onTravelChange(on) {
+    if (this.mapless) { this.renderTravel(); this.renderHud(); return; }
+    if (on) {
+      /* Take the tile layer off the map rather than leaving it to follow the
+         pan. Leaflet has no "pause": a layer on a moving map fetches, and the
+         veil means nobody can see the result anyway. */
+      if (this.tiles && this.map.hasLayer(this.tiles)) this.map.removeLayer(this.tiles);
+      this.renderTravel();
+      this.renderHud();
+      return;
+    }
+    if (this.tiles && !this.map.hasLayer(this.tiles)) this.tiles.addTo(this.map);
+    this.renderTravel();
+    /* Come back where you actually are, not where you got in the car. One
+       sync, one redraw — the cells in between were never asked for and never
+       will be. */
+    const p = Loc.last;
+    if (p) {
+      this.map.setView([p.latitude, p.longitude], settings().mapZoom);
+      this.trailPts = [];                    // a drive is not a walked trail
+      this.trail.setLatLngs([]);
+      this.ensureZone();
+      this.syncChunks({ force: true });
+    }
+    this.onPosition();
+  },
+
+  /** The overlay, and the speed on it. Cheap enough to redraw on every fix. */
+  renderTravel() {
+    const veil = $("#travelVeil");
+    if (!veil) return;
+    const on = Loc.pausing();
+    document.body.classList.toggle("travelling", on);
+    veil.classList.toggle("hidden", !on);
+    if (!on) { veil.innerHTML = ""; return; }
+    const kph = Math.round(Loc.speedKph());
+    const mph = Math.round(Loc.speedMph());
+    veil.innerHTML =
+      '<div class="tvInner">' +
+        '<div class="tvRule"></div>' +
+        '<div class="tvWord">Traveling</div>' +
+        '<div class="tvRule"></div>' +
+        '<div class="tvSpeed mono" id="tvSpeed">' + kph + " km/h · " + mph + " mph</div>" +
+        '<p class="tvNote">You are moving faster than you can walk, so the road is ' +
+          "passing without you. Nothing is counting and the map has stopped " +
+          "asking for ground you will not set foot on.</p>" +
+        '<p class="tvNote dimmer">It picks up wherever you get out.</p>' +
+      "</div>";
+  },
+
   onPosition() {
     const p = Loc.last;
     if (!p) return;
+
+    /* Travelling: keep the position — everything downstream will want it the
+       moment you stop — and do nothing else. No marker, no tiles, no zone, no
+       spawner, no proximity, no survey. The one exception is the dungeon
+       leash, which costs nothing and is the difference between a paused run
+       and a run that was carried across town while nobody was watching. */
+    if (Loc.pausing()) {
+      this.ch.position = { latitude: p.latitude, longitude: p.longitude, lastUpdated: nowTs() };
+      if (typeof Dungeon !== "undefined" && Dungeon.current()) Dungeon.checkLeash();
+      this.renderTravel();
+      Characters.save(this.ch);
+      return;
+    }
 
     // Location started working — by the button, by the browser's own settings,
     // or by a watch that finally delivered. Get the dialog out of the way.
@@ -1172,6 +1340,7 @@ const Game = {
     if (Dungeon.current()) { Dungeon.checkLeash(); this.renderDungeonBar(); }
     this.checkQuestProximity();
     this.drawDenizens();
+    this.drawBuildings();
     this.checkProximity();
     this.renderHud();
     this.refreshDevReadout();
@@ -1539,7 +1708,12 @@ const Game = {
     const c = this.ch;
     if (!c || !$("#chName")) return;
     Characters.refreshMaxes(c);
-    $("#chAvatar").textContent = CLASSES[c.class].icon;
+    /* The chip carries the same framed face as everything else, so your own
+       character looks like a character rather than a class icon. */
+    $("#chAvatar").innerHTML = Art.portraitHtml({
+      image: Content.classPortrait(c.class), icon: CLASSES[c.class].icon,
+      difficulty: 0, w: 30, h: 37
+    });
     $("#chName").textContent = c.name;
     $("#chSub").textContent = "Lv " + c.level + " " + c.race + " " + c.class +
       (c.unspentPoints ? "  ·  " + c.unspentPoints + " pts" : "");

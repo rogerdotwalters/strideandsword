@@ -115,6 +115,7 @@ const Shapes = {
       count: 2,                   // how many creatures live here
       spawnTableId: "",           // which ones
       npcName: "", npcIcon: "",   // for a character
+      npcPortrait: "",            // …and the picture inside their token
       questId: "",                // a character who hands out work
       roams: "zone",              // zone | place | world
       difficulty: 0,              // nudges what lives here

@@ -111,9 +111,13 @@ const STAND_BY = (tx, ty, back) => {
   await page.click('#meZoneNew');
   await page.waitForTimeout(400);
 
-  await step('three layers now, and instances is one of them', async () => {
+  await step('four layers now, and instances is one of them', async () => {
     const tabs = await page.$$eval('.layerSwitch button', bs => bs.map(b => b.textContent.trim()));
-    if (tabs.length !== 3) throw new Error(tabs.length + ' tabs: ' + tabs.join(' | '));
+    /* Locations, Dungeons, Instances, Buildings. This assertion is here to
+       catch a layer that stopped rendering, so it counts rather than names —
+       update it when a fifth arrives rather than loosening it. */
+    if (tabs.length !== 4) throw new Error(tabs.length + ' tabs: ' + tabs.join(' | '));
+    if (!tabs.some(t => /Instances/.test(t))) throw new Error('no instances tab: ' + tabs.join(' | '));
     await page.click('[data-mode="instances"]');
     await page.waitForTimeout(250);
     const mode = await page.evaluate(() => ME.Me.mode);
@@ -412,6 +416,12 @@ const STAND_BY = (tx, ty, back) => {
       return { moved: Math.hypot(now.x - from.x, now.y - from.y), heading: best };
     });
     if (Math.abs(one.moved - 6) > 0.4) throw new Error('walked 6 m, moved ' + one.moved.toFixed(2));
+    /* Those six metres can walk onto an encounter stop, and `advance` refuses
+       to move or to count while a fight is up — so the second half of this
+       step would measure the fight, not the pace, and report 0.00 moved. It is
+       the one intermittent failure this suite has ever had. End any stray
+       fight first; what is being asserted here is arithmetic, not combat. */
+    await parkClear(g);
     const two = await g.evaluate(id => {
       const d = SS.Content.get('instances', id); d.pace = 2; SS.Content.save('instances', d);
       const r = SS.Instance.current(), C = SS.Content;
@@ -470,14 +480,31 @@ const STAND_BY = (tx, ty, back) => {
     });
     if (!still) throw new Error('monsters moved while the player stood still');
     const moved = await g.evaluate(() => {
+      const run = SS.Instance.current();
+      if (SS.Game.inCombat) SS.Combat.end('won');
       const snap = () => SS.Instance.current().plan.entities
         .filter(e => e.kind !== 'chest').map(e => [+e.x.toFixed(3), +e.y.toFixed(3)]);
-      const a = JSON.stringify(snap());
-      SS.Walk.add(10);
-      return a !== JSON.stringify(snap());
+      /* Five ten-metre steps, with the player put back where they started
+         after each one. Two reasons. A monster with nothing in sight wanders
+         towards a point it can *see*, and on an unlucky roll it can sit out a
+         step — so one step is not enough to prove the link. And walking fifty
+         metres for real would carry the player into something, start a fight,
+         and wreck the two tests after this one, which is exactly what
+         happened. The claim is that metres walked are what move the floor;
+         where the player ends up is not part of it. */
+      for (let i = 0; i < 5; i++) {
+        const home = { x: run.pos.x, y: run.pos.y };
+        const a = JSON.stringify(snap());
+        SS.Walk.add(10);
+        const now = SS.Instance.current();
+        now.pos.x = home.x; now.pos.y = home.y;
+        SS.Instance.saveRun(now);
+        if (a !== JSON.stringify(snap())) return (i + 1) * 10;
+      }
+      return 0;
     });
-    if (!moved) throw new Error('monsters did not step when the player walked');
-    return 'still for 600 ms with nothing moving, then a step each when we walked';
+    if (!moved) throw new Error('monsters did not step across fifty metres of walking');
+    return 'still for 600 ms with nothing moving, then a step within ' + moved + ' m of walking';
   });
 
   await step('a monster that can see you comes for you', async () => {

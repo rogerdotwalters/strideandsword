@@ -37,6 +37,15 @@ const Me = {
           '<div class="mapWrap"><div id="map"></div>' +
             '<div class="mapHint hidden" id="meHint"></div>' +
             '<div class="zoomModes" id="meZoom"></div>' +
+            /* On a phone every one of those map controls is a thing sitting on
+               top of the map you are trying to read, and there is not much map
+               to spare. One button, one dropdown, and the map gets its corner
+               back. The desktop keeps the controls where they are. */
+            '<div class="mapTools mobileOnly" id="meTools">' +
+              '<button class="mtBtn" id="meToolsBtn" aria-haspopup="true" ' +
+                'aria-expanded="false" aria-label="Map controls">🗺️<span class="mtCaret">▾</span></button>' +
+              '<div class="mapMenu hidden" id="meToolsMenu" role="menu"></div>' +
+            "</div>" +
             '<button class="fab" id="meFab">+ Place</button>' +
           "</div>" +
           '<div class="meTable">' +
@@ -57,6 +66,7 @@ const Me = {
     $("#meFab").onclick      = () => this.togglePlacing();
     $("#meZoneNew").onclick  = () => this.newZoneHere();
     $("#meMenu").onclick     = () => this.mobileMenu();
+    $("#meToolsBtn").onclick = (e) => { e.stopPropagation(); this.toggleMapMenu(); };
     $$("#mePaneBar [data-pane]").forEach(b => {
       b.onclick = () => this.setPane(b.getAttribute("data-pane"));
     });
@@ -64,9 +74,20 @@ const Me = {
     $("#meSearch").addEventListener("keydown", e => { if (e.key === "Enter") this.search(); });
     $("#meZone").onchange    = () => this.selectZone($("#meZone").value);
 
+    /* Anywhere else closes the dropdown — including the map itself, because a
+       menu you have to aim at its own button to dismiss is a trap on a phone. */
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest || !e.target.closest("#meTools")) this.toggleMapMenu(false);
+    });
+
     document.addEventListener("keydown", (e) => {
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+      if (e.key === "Escape") this.toggleMapMenu(false);
       if (e.key === "Escape" && this.placing) this.togglePlacing(false);
+      if (typeof Mb !== "undefined" && Mb.tracing) {
+        if (e.key === "Enter")  { e.preventDefault(); Mb.finishTrace(true); return; }
+        if (e.key === "Escape") { e.preventDefault(); Mb.finishTrace(false); return; }
+      }
       const layer = this.layer3();
       if ((e.key === "Delete" || e.key === "Backspace") && layer.selected && !layer.isNew) {
         e.preventDefault(); layer.del();
@@ -140,6 +161,7 @@ const Me = {
     this.selected = null; this.draft = null; this.isNew = false;
     Md.selected = null; Md.draft = null; Md.isNew = false;
     Mi.selected = null; Mi.draft = null; Mi.isNew = false;
+    Mb.selected = null; Mb.draft = null; Mb.isNew = false;
     this.map.setView([z.centerLatitude, z.centerLongitude], this.zoomOf("street"));
     this.renderAll();
   },
@@ -187,6 +209,8 @@ const Me = {
     this.zoneLayer = L.layerGroup().addTo(this.map);
 
     this.map.on("click", (e) => {
+      // Tracing a building outline takes clicks too, one corner at a time.
+      if (typeof Mb !== "undefined" && Mb.tracing) { Mb.traceAt(e.latlng.lat, e.latlng.lng); return; }
       if (!this.placing) return;
       this.placeAt(e.latlng.lat, e.latlng.lng);
     });
@@ -227,6 +251,67 @@ const Me = {
     host.querySelectorAll(".zmBtn").forEach(b => {
       b.classList.toggle("on", Math.abs(this.zoomOf(b.dataset.z) - z) < 0.4);
     });
+    if (!$("#meToolsMenu").classList.contains("hidden")) this.buildMapMenu();
+  },
+
+  /* ---- the phone's map controls, in one dropdown ----------------------
+     The presets, the zoom steps and "back to the zone" are all the same kind
+     of thing — *how am I looking at this map* — so on a narrow screen they
+     collapse into one menu rather than four floating controls competing with
+     the map, the hint bar, the attribution and the place button for the same
+     few hundred pixels. Nothing here is phone-only behaviour: every row does
+     exactly what its desktop control does. */
+
+  buildMapMenu() {
+    const host = $("#meToolsMenu");
+    if (!host || !this.map) return;
+    const z = this.map.getZoom();
+    const is = (k) => Math.abs(this.zoomOf(k) - z) < 0.4;
+    const row = (act, icon, label, note, on) =>
+      '<button class="mmRow' + (on ? " on" : "") + '" role="menuitem" data-act="' + act + '">' +
+        '<span class="mmIc">' + icon + "</span>" +
+        '<span class="mmLb">' + label + (note ? '<span class="mmNote">' + note + "</span>" : "") + "</span>" +
+        (on ? '<span class="mmTick">✓</span>' : "") +
+      "</button>";
+    host.innerHTML =
+      '<div class="mmHead">Map view</div>' +
+      row("street", "🚗", "Street", "the whole zone and its roads", is("street")) +
+      row("walk", "🚶", "Walking", "close enough to place on a door", is("walk")) +
+      '<div class="mmSep"></div>' +
+      row("in", "＋", "Zoom in", "", false) +
+      row("out", "－", "Zoom out", "", false) +
+      (this.zone ? row("zone", "🎯", "Back to " + esc(this.zone.label), "", false) : "") +
+      '<div class="mmFoot mono">zoom ' + (Math.round(z * 10) / 10) + "</div>";
+    host.querySelectorAll(".mmRow").forEach(b => {
+      b.onclick = (e) => { e.stopPropagation(); this.mapMenuAct(b.dataset.act); };
+    });
+  },
+
+  mapMenuAct(act) {
+    const c = this.map.getCenter();
+    if (act === "street" || act === "walk") {
+      this.map.setView(c, this.zoomOf(act), { animate: true });
+    } else if (act === "in") {
+      this.map.setZoom(Math.min(24, this.map.getZoom() + 1));
+    } else if (act === "out") {
+      this.map.setZoom(Math.max(3, this.map.getZoom() - 1));
+    } else if (act === "zone" && this.zone) {
+      this.map.setView([this.zone.centerLatitude, this.zone.centerLongitude], this.zoomOf("street"));
+    }
+    this.syncZoomModes();
+    // The stepper rows are worth keeping open — nobody zooms in exactly once.
+    if (act !== "in" && act !== "out") this.toggleMapMenu(false);
+    else this.buildMapMenu();
+  },
+
+  toggleMapMenu(force) {
+    const menu = $("#meToolsMenu"), btn = $("#meToolsBtn");
+    if (!menu || !btn) return;
+    const show = force == null ? menu.classList.contains("hidden") : !!force;
+    if (show) this.buildMapMenu();
+    menu.classList.toggle("hidden", !show);
+    btn.classList.toggle("on", show);
+    btn.setAttribute("aria-expanded", show ? "true" : "false");
   },
 
   togglePlacing(force) {
@@ -234,7 +319,9 @@ const Me = {
     $("#mePlace").classList.toggle("on", this.placing);
     // Say what will be placed. On a phone the layer switch lives in the list
     // pane, so the button is the only thing on the map that can tell you.
-    const what = this.mode === "dungeons" ? "Dungeon" : this.mode === "instances" ? "Instance" : "Location";
+    const what = this.mode === "dungeons" ? "Dungeon"
+               : this.mode === "instances" ? "Instance"
+               : this.mode === "buildings" ? "Building" : "Location";
     const fab = $("#meFab");
     if (fab) { fab.classList.toggle("on", this.placing); fab.textContent = this.placing ? "Cancel" : "+ " + what; }
     const pl = $("#mePlace");
@@ -244,6 +331,7 @@ const Me = {
     hint.classList.toggle("hidden", !this.placing);
     hint.textContent = this.mode === "dungeons" ? "Click the map to drop a dungeon · Esc to cancel"
       : this.mode === "instances" ? "Click the map to put an instance door here · Esc to cancel"
+      : this.mode === "buildings" ? "Click the map to put a building here · Esc to cancel"
       : "Click the map to place a location · Esc to cancel";
     const el = this.map.getContainer();
     el.style.cursor = this.placing ? "crosshair" : "";
@@ -254,6 +342,9 @@ const Me = {
     // leaves the button saying Cancel when nothing is placeable, and the next
     // tap on it turns placing off instead of on — which reads as the editor
     // simply refusing to place anything, ever.
+    /* Buildings belong to the world rather than to a zone, so they are the
+       one thing you can put down before making one. */
+    if (this.mode === "buildings") { this.togglePlacing(false); Mb.placeAt(lat, lng); return; }
     this.togglePlacing(false);
     if (!this.zone) {
       // Send them where the button actually is rather than just refusing.
@@ -300,6 +391,7 @@ const Me = {
     this.drawLocations();
     Md.draw();
     Mi.draw();
+    Mb.draw();
     this.renderTableBar();
     this.renderTable();
     this.renderForm();
@@ -308,7 +400,9 @@ const Me = {
 
   /** Whichever layer the switch has active — the one Delete and the form act on. */
   layer3() {
-    return this.mode === "dungeons" ? Md : this.mode === "instances" ? Mi : this;
+    return this.mode === "dungeons" ? Md
+         : this.mode === "instances" ? Mi
+         : this.mode === "buildings" ? Mb : this;
   },
 
   /* Three layers share one map. The switch decides which one the table and the
@@ -434,14 +528,18 @@ const Me = {
   /* ------------------------------------------------------------------ table */
   renderTableBar() {
     const n = this.mode === "dungeons" ? Md.all().length
-            : this.mode === "instances" ? Mi.all().length : this.locations().length;
+            : this.mode === "instances" ? Mi.all().length
+            : this.mode === "buildings" ? Mb.all().length : this.locations().length;
     const tab = (key, label) => '<button data-mode="' + key + '"' +
       (this.mode === key ? ' class="on"' : "") + ">" + label + "</button>";
     $("#meTableBar").innerHTML =
       '<div class="layerSwitch">' +
-        tab("locations", "📍 Locations") + tab("dungeons", "🏰 Dungeons") + tab("instances", "🗝️ Instances") +
+        tab("locations", "📍 Locations") + tab("dungeons", "🏰 Dungeons") +
+        tab("instances", "🗝️ Instances") + tab("buildings", "🏪 Buildings") +
       "</div>" +
-      '<span class="tiny dimmer">' + n + " in " + (this.zone ? esc(this.zone.label || "this zone") : "no zone") + "</span>" +
+      '<span class="tiny dimmer">' + n + (this.mode === "buildings"
+        ? " in the world"
+        : " in " + (this.zone ? esc(this.zone.label || "this zone") : "no zone")) + "</span>" +
       '<div class="spacer"></div>' +
       (this.zone
         ? '<label class="check" style="margin:0"><input type="checkbox" id="meAuthored"' +
@@ -470,6 +568,7 @@ const Me = {
   renderTable() {
     if (this.mode === "dungeons") { Md.renderTable(); return; }
     if (this.mode === "instances") { Mi.renderTable(); return; }
+    if (this.mode === "buildings") { Mb.renderTable(); return; }
     const wrap = $("#meTableWrap");
     const rows = this.locations().slice();
     const s = this.sort;
@@ -697,6 +796,7 @@ const Me = {
       "<span><b>" + here + "</b> locations here</span>" +
       "<span><b>" + Md.all().length + "</b> dungeons here</span>" +
       "<span><b>" + Mi.all().length + "</b> instances here</span>" +
+      "<span><b>" + Mb.all().length + "</b> buildings</span>" +
       "<span><b>" + n + "</b> locations in total</span>" +
       "<span><b>" + s.spawns + "</b> spawn tables</span>" +
       "<span><b>" + this.zones().length + "</b> zones</span>" +
@@ -745,6 +845,7 @@ Object.assign(Me, {
   renderForm() {
     if (this.mode === "dungeons") { Md.renderForm(); return; }
     if (this.mode === "instances") { Mi.renderForm(); return; }
+    if (this.mode === "buildings") { Mb.renderForm(); return; }
     const host = $("#meForm");
     if (!this.draft) {
       host.innerHTML = '<div class="emptyForm">' +

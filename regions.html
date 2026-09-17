@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0e14">
+<title>Stride &amp; Sword — Region Editor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/mapeditor.css">
+<link rel="stylesheet" href="css/regions.css">
+</head>
+<body>
+<div id="re"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="js/core/util.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/api.js"></script>
+<script src="js/core/settings.js"></script>
+<script src="js/world/content.js"></script>
+<script src="js/world/regions.js"></script>
+<!-- Google Earth exports: KML text and KMZ zips, turned into GeoJSON. -->
+<script src="js/world/buildings.js"></script>
+<script src="js/world/kml.js"></script>
+<script src="js/world/atlas.js"></script>
+<script src="js/world/grid.js"></script>
+<!-- Importing real terrain goes through Chunks.survey, which reads the cache
+     the game fills and obeys the same Overpass rate limiting. -->
+<script src="js/world/chunks.js"></script>
+<script src="js/core/db.js"></script>
+<script src="js/regions/app.js"></script>
+</body>
+</html>

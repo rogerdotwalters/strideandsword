@@ -501,6 +501,16 @@ const Se = {
             '<label class="f"><span>Icon</span><input class="input" id="z_icon" value="' +
               esc(s.npcIcon || "") + '" placeholder="🧍"></label>' +
           "</div>" +
+          '<div class="portRow">' +
+            Art.tokenHtml({ image: s.npcPortrait, icon: s.npcIcon || "🧍", difficulty: 0, size: 44 }) +
+            Art.portraitHtml({ image: s.npcPortrait, icon: s.npcIcon || "🧍", difficulty: 0, w: 60, h: 74 }) +
+            '<div class="portActs">' +
+              '<label class="btn sm ghost" for="z_portFile">Upload a face</label>' +
+              '<input type="file" id="z_portFile" accept="image/*" hidden>' +
+              '<button type="button" class="btn sm danger" id="z_portClear"' +
+                (s.npcPortrait ? "" : " disabled") + ">Clear</button>" +
+            "</div>" +
+          "</div>" +
           '<label class="f"><span>Hands out</span><select id="z_quest">' +
             quests.map(q => '<option value="' + esc(q.value) + '"' +
               (s.questId === q.value ? " selected" : "") + ">" + esc(q.label) + "</option>").join("") +
@@ -535,6 +545,19 @@ const Se = {
     on("z_npc", v => { this.draft.npcName = v; this.commit(true); });
     on("z_icon", v => { this.draft.npcIcon = v; this.commit(true); });
     on("z_quest", v => { this.draft.questId = v; this.commit(true); }, "change");
+    const pf = $("#z_portFile"), pc = $("#z_portClear");
+    if (pf) pf.onchange = () => {
+      const f = pf.files && pf.files[0];
+      pf.value = "";
+      if (!f) return;
+      Art.readPortrait(f).then(url => {
+        this.draft.npcPortrait = url;
+        this.commit(true);
+        this.renderForm();
+        this.toast("Face attached (" + Math.round(url.length / 1024) + " KB).", "good");
+      }).catch(e => this.toast(e.message, "bad", 4200));
+    };
+    if (pc) pc.onclick = () => { this.draft.npcPortrait = ""; this.commit(true); this.renderForm(); };
     on("z_roams", v => { this.draft.roams = v; this.commit(true); }, "change");
   },
 

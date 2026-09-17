@@ -85,7 +85,7 @@ const Loc = {
         this.status = "live";
         this.accept({
           latitude: pos.coords.latitude, longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy, ts: nowTs()
+          accuracy: pos.coords.accuracy, speed: pos.coords.speed, ts: nowTs()
         }, true);
         this.start();                        // hold the watch open from here
         resolve({ ok: true, accuracy: pos.coords.accuracy });
@@ -141,6 +141,9 @@ const Loc = {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
+          // The device's own reading where it has one: doppler off the GPS
+          // chip beats anything we can difference out of two fixes.
+          speed: pos.coords.speed,
           ts: nowTs()
         }, first);
         if (first) Game.setLocStatus("Location locked on. ±" + Math.round(pos.coords.accuracy) + " m.");
@@ -179,18 +182,134 @@ const Loc = {
     this.accept({ latitude: lat, longitude: lng, accuracy: 5, ts: nowTs(), sim: true }, true);
   },
 
+  /* ------------------------------------------------------------- how fast
+     A speed, and the one decision that hangs off it: are you walking, or are
+     you in a car?
+
+     Two sources. The device's own `coords.speed` when it offers one — it is
+     computed from doppler on real GPS hardware and is far better than anything
+     we can derive — and otherwise the distance between two fixes over the time
+     between them.
+
+     Neither is trustworthy sample by sample. A fix that jumps sixty metres
+     sideways while you stand at a window reads as twenty miles an hour, so the
+     reading used for the decision is the **median** of the recent samples: one
+     bad fix cannot move a median, and three in a row are not noise any more.
+
+     Nothing here uses a timer. The speed is recomputed when a fix arrives,
+     which is the only moment it can have changed. */
+
+  SPEED_WINDOW_MS: 25000,    // samples older than this stop counting
+  SPEED_MAX_SAMPLES: 8,
+  ENTER_HOLD_MS: 6000,       // sustained above the line before the veil drops
+  LEAVE_HOLD_MS: 12000,      // and below it before the world comes back
+  /* A fix this vague cannot be differenced into a speed worth having: the
+     error is bigger than the distance walked between two samples. */
+  SPEED_ACCURACY_M: 60,
+
+  speedMps: 0,               // the smoothed reading
+  travelling: false,
+  travelSince: 0,
+  _speeds: [],               // { ts, mps }
+  _fastSince: 0, _slowSince: 0,
+
+  /** Thresholds in m/s, from the two settings in km/h. */
+  travelLimits() {
+    const s = settings();
+    return { enter: (+s.travelEnterKph || 16) / 3.6, leave: (+s.travelLeaveKph || 8) / 3.6 };
+  },
+
+  /**
+   * Fold one fix into the speed reading, and decide whether we are travelling.
+   * Returns the speed of *this* sample, which is what the walk credit is
+   * judged on — separately from the smoothed state, so a single fast sample
+   * never earns metres even before the veil is up.
+   */
+  trackSpeed(fix, moved, prev) {
+    /* Simulated fixes are teleports: the dev panel puts you 300 m away in one
+       step, which is 60 m/s and would veil the screen every time anybody
+       tested anything. Nothing about a simulated position is a speed. */
+    if (fix.sim || this.simulated) { this.clearSpeed(); return 0; }
+
+    const now = fix.ts || nowTs();
+    let mps = null;
+    if (fix.speed != null && isFinite(fix.speed) && fix.speed >= 0) {
+      mps = +fix.speed;                                   // the device's own
+    } else if (prev) {
+      const dt = (now - prev.ts) / 1000;
+      const vague = Math.max(fix.accuracy || 0, prev.accuracy || 0) > this.SPEED_ACCURACY_M;
+      if (dt >= 0.5 && dt <= 60 && !vague) mps = moved / dt;
+    }
+    if (mps == null) return 0;
+
+    this._speeds.push({ ts: now, mps });
+    this._speeds = this._speeds
+      .filter(x => now - x.ts <= this.SPEED_WINDOW_MS)
+      .slice(-this.SPEED_MAX_SAMPLES);
+
+    const sorted = this._speeds.map(x => x.mps).sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    this.speedMps = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+
+    const lim = this.travelLimits();
+    if (this.speedMps >= lim.enter) {
+      this._slowSince = 0;
+      if (!this._fastSince) this._fastSince = now;
+      if (!this.travelling && now - this._fastSince >= this.ENTER_HOLD_MS) this.setTravelling(true, now);
+    } else if (this.speedMps <= lim.leave) {
+      this._fastSince = 0;
+      if (!this._slowSince) this._slowSince = now;
+      if (this.travelling && now - this._slowSince >= this.LEAVE_HOLD_MS) this.setTravelling(false, now);
+    }
+    return mps;
+  },
+
+  setTravelling(on, now) {
+    if (this.travelling === !!on) return;
+    this.travelling = !!on;
+    this.travelSince = on ? (now || nowTs()) : 0;
+    if (typeof Game !== "undefined" && Game.onTravelChange) Game.onTravelChange(this.travelling);
+  },
+
+  /** Back to a standstill: no samples, no state, nothing half-remembered. */
+  clearSpeed() {
+    this._speeds = [];
+    this.speedMps = 0;
+    this._fastSince = 0; this._slowSince = 0;
+    this.setTravelling(false);
+  },
+
+  speedKph() { return this.speedMps * 3.6; },
+  speedMph() { return this.speedMps * 2.236936; },
+
+  /**
+   * Is the game held? One question, one answer, asked by everything that
+   * stops — the walk credit, the map, the survey, the overlay — so turning the
+   * setting off cannot leave half of it paused and the other half running.
+   */
+  pausing() { return this.travelling && settings().travelVeil !== false; },
+
   accept(fix, force) {
     const s = settings();
     if (!force && this.last && nowTs() - this.lastAccepted < s.gpsUpdateInterval) return;
     // Ignore jitter smaller than the reported accuracy — stops the walk
     // counter inflating while you sit still.
     let walked = 0;
+    let sampleMps = 0;
     if (this.last) {
       const moved = haversine(this.last.latitude, this.last.longitude, fix.latitude, fix.longitude);
+      sampleMps = this.trackSpeed(fix, moved, this.last);
       const noiseFloor = fix.sim ? 0 : Math.max(4, Math.min(25, (fix.accuracy || 15) * 0.6));
       if (moved > noiseFloor) walked = moved;
       else if (!force) { this.last = fix; this.lastAccepted = nowTs(); this._emit(); return; }
     }
+    /* Metres covered faster than anyone runs are not walked metres, whatever
+       the smoothed state says yet. Judging the credit on this one sample
+       rather than on `travelling` means the six seconds it takes to be sure
+       you are in a car are not six seconds of free XP — and it throws away
+       the fix that jumped across the street, which was never a walk either. */
+    if (walked && settings().travelVeil !== false &&
+        (this.travelling || sampleMps >= this.travelLimits().enter)) walked = 0;
     /* Move first, then credit the walk.
        These used to be the other way round, which meant everything downstream
        of Walk.add — the dungeon floor, the XP, anything asking "where am I?" —

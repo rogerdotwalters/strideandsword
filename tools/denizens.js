@@ -55,6 +55,11 @@ async function newPage(browser, opts) {
   return { ctx, page };
 }
 
+/* Buildings put their own people on the map — shopkeepers, with a trade
+   instead of a fight — and they are denizens like any other, so anything here
+   that means *a creature* has to say so. The sample buildings seed in because
+   `emptyDatabase` only clears the content tables, and that is deliberate: the
+   world this suite measures is the world the player gets. */
 /** Make a character and get as far as a map with a surveyed world on it. */
 async function intoTheGame(g, who) {
   await g.goto(GAME_URL);
@@ -304,7 +309,8 @@ async function takeParks(g) {
   await step('it moves, and it moves at a believable pace', async () => {
     const r = await g.evaluate((t0) => {
       const p = SS.Loc.last;
-      const d = SS.Denizens.near(p.latitude, p.longitude, 600, t0)[0];
+      const d = SS.Denizens.near(p.latitude, p.longitude, 600, t0)
+        .filter(x => x.kind === 'creature')[0];
       let moved = 0, still = 0, fastest = 0, total = 0;
       let prev = SS.Denizens.positionAt(d, t0);
       for (let i = 1; i <= 240; i++) {
@@ -327,7 +333,8 @@ async function takeParks(g) {
   await step('a leg boundary is exactly its waypoint', async () => {
     const r = await g.evaluate((t0) => {
       const p = SS.Loc.last;
-      const d = SS.Denizens.near(p.latitude, p.longitude, 600, t0)[0];
+      const d = SS.Denizens.near(p.latitude, p.longitude, 600, t0)
+        .filter(x => x.kind === 'creature')[0];
       const leg = Math.ceil(t0 / SS.Denizens.LEG_MS);
       const w = SS.Denizens.waypoint(d, leg);
       const at = SS.Denizens.positionAt(d, leg * SS.Denizens.LEG_MS);
@@ -464,11 +471,15 @@ async function takeParks(g) {
       SS.Store.set('denizen_kills', {});
       const n = SS.Game.drawDenizens(t0);
       const rows = SS.Game.interactables().filter(x => x.kind === 'denizen');
+      const beasts = SS.Denizens.near(SS.Loc.last.latitude, SS.Loc.last.longitude, 600, t0)
+        .filter(x => x.kind === 'creature');
       return {
-        drawn: n, pins: document.querySelectorAll('.denizenPin').length,
+        // A denizen is a `.tok` with the `dz` class on it now — the flat
+        // `.denizenPin` was replaced when creatures got faces.
+        drawn: n, pins: document.querySelectorAll('.tok.dz').length,
         rows: rows.length,
         sorted: rows.every((x, i) => !i || x.distance >= rows[i - 1].distance),
-        note: (rows[0] || {}).note || '',
+        note: (rows.find(x => beasts.some(b => b.name === x.name)) || {}).note || '',
         far: rows.filter(x => !x.inRange).length
       };
     }, NOON);
@@ -481,8 +492,10 @@ async function takeParks(g) {
 
   await step('one out of range cannot be fought, only looked at', async () => {
     const r = await g.evaluate((t0) => {
-      const far = SS.Game.interactables().filter(x => x.kind === 'denizen' && !x.inRange)[0];
-      const d = (SS.Game._denizens || []).find(x => x.name === far.name);
+      const beasts = (SS.Game._denizens || []).filter(x => x.kind === 'creature');
+      const far = SS.Game.interactables()
+        .filter(x => x.kind === 'denizen' && !x.inRange && beasts.some(b => b.name === x.name))[0];
+      const d = beasts.find(x => x.name === far.name);
       SS.Game.openDenizen(d);
       const modal = document.querySelector('.modalBack');
       const text = modal ? modal.textContent : '';
@@ -497,7 +510,7 @@ async function takeParks(g) {
 
   await step('walking up to one puts the fight on the table', async () => {
     const r = await g.evaluate((t0) => {
-      const d = (SS.Game._denizens || [])[0];
+      const d = (SS.Game._denizens || []).filter(x => x.kind === 'creature')[0];
       // Stand on it. The suite moves the player rather than waiting for the
       // creature to wander over.
       SS.Loc.last = { latitude: d.latitude, longitude: d.longitude, accuracy: 5 };

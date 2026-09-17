@@ -24,7 +24,8 @@ const Content = (function () {
     dungeons:    "content_dungeons",
     instances: "content_instances",
     quests:    "content_quests",
-    config:    "content_config"
+    config:    "content_config",
+    portraits: "content_portraits"
   };
 
   /* Which field holds the primary key, per table. */
@@ -78,28 +79,73 @@ const Content = (function () {
   /* ------------------------------------------------------------- gear slots
      gameType maps an authored slot onto the three equipment slots the game
      actually has, so authored gear is equippable without further work. */
+  /* The attributes an item may ask for. `ATTRS` lives in js/player/classes.js,
+     which the editors do not load — and the editors are exactly where these
+     fields are filled in — so the list is here, keyed the same way. */
+  const REQ_ATTRS = [
+    { key: "strength",     short: "STR", field: "reqStrength" },
+    { key: "dexterity",    short: "DEX", field: "reqDexterity" },
+    { key: "constitution", short: "CON", field: "reqConstitution" },
+    { key: "intelligence", short: "INT", field: "reqIntelligence" },
+    { key: "wisdom",       short: "WIS", field: "reqWisdom" },
+    { key: "charisma",     short: "CHA", field: "reqCharisma" },
+    { key: "luck",         short: "LCK", field: "reqLuck" }
+  ];
+
+  /* Authored gear types, and where each one hangs.
+
+     `gameType` is what the combat maths sees (weapon / armor / trinket);
+     `slot` is where it goes on the paper doll; `weight` and `family` are what
+     the class rules are written against. An authored item may override the
+     weight and the family, but it inherits sensible ones so a five-field form
+     is not a sixteen-field form. */
   const GEAR_SLOTS = [
-    { key: "helm",     label: "Helm",      gameType: "armor",      icon: "helm" },
-    { key: "shoulder", label: "Shoulders", gameType: "armor",      icon: "shoulder" },
-    { key: "chest",    label: "Chest",     gameType: "armor",      icon: "chest" },
-    { key: "clothing", label: "Clothing",  gameType: "armor",      icon: "cloth" },
-    { key: "gloves",   label: "Gloves",    gameType: "armor",      icon: "gloves" },
-    { key: "belt",     label: "Belt",      gameType: "armor",      icon: "belt" },
-    { key: "legs",     label: "Legs",      gameType: "armor",      icon: "legs" },
-    { key: "boots",    label: "Boots",     gameType: "armor",      icon: "boots" },
-    { key: "cloak",    label: "Cloak",     gameType: "armor",      icon: "cloak" },
-    { key: "shield",   label: "Shield",    gameType: "armor",      icon: "shield" },
-    { key: "sword",    label: "Sword",     gameType: "weapon",     icon: "sword" },
-    { key: "axe",      label: "Axe",       gameType: "weapon",     icon: "axe" },
-    { key: "mace",     label: "Mace",      gameType: "weapon",     icon: "mace" },
-    { key: "dagger",   label: "Dagger",    gameType: "weapon",     icon: "dagger" },
-    { key: "spear",    label: "Spear",     gameType: "weapon",     icon: "spear" },
-    { key: "bow",      label: "Bow",       gameType: "weapon",     icon: "bow" },
-    { key: "staff",    label: "Staff",     gameType: "weapon",     icon: "staff" },
-    { key: "wand",     label: "Wand",      gameType: "weapon",     icon: "wand" },
-    { key: "ring",     label: "Ring",      gameType: "trinket",    icon: "ring" },
-    { key: "amulet",   label: "Amulet",    gameType: "trinket",    icon: "amulet" },
-    { key: "gem",      label: "Gem",       gameType: "trinket",    icon: "gem" },
+    { key: "helm",     label: "Helm",      gameType: "armor",      icon: "helm",
+      slot: "helm",      weight: "medium" },
+    { key: "shoulder", label: "Shoulders", gameType: "armor",      icon: "shoulder",
+      slot: "shoulders", weight: "medium" },
+    { key: "chest",    label: "Chest",     gameType: "armor",      icon: "chest",
+      slot: "chest",     weight: "medium" },
+    { key: "clothing", label: "Clothing",  gameType: "armor",      icon: "cloth",
+      slot: "chest",     weight: "light" },
+    { key: "gloves",   label: "Gloves",    gameType: "armor",      icon: "gloves",
+      slot: "gloves",    weight: "medium" },
+    { key: "belt",     label: "Belt",      gameType: "armor",      icon: "belt",
+      slot: "belt",      weight: "light" },
+    { key: "legs",     label: "Legs",      gameType: "armor",      icon: "legs",
+      slot: "legs",      weight: "medium" },
+    { key: "boots",    label: "Boots",     gameType: "armor",      icon: "boots",
+      slot: "boots",     weight: "medium" },
+    { key: "cloak",    label: "Cloak",     gameType: "armor",      icon: "cloak",
+      slot: "back",      weight: "light" },
+    { key: "shield",   label: "Shield",    gameType: "armor",      icon: "shield",
+      slot: "offhand",   weight: "heavy",  family: "shield" },
+    { key: "focus",    label: "Focus",     gameType: "armor",      icon: "gem",
+      slot: "offhand",   weight: "light",  family: "focus" },
+    { key: "sword",    label: "Sword",     gameType: "weapon",     icon: "sword",
+      slot: "mainhand",  family: "blade" },
+    { key: "greatsword", label: "Greatsword", gameType: "weapon",  icon: "sword",
+      slot: "mainhand",  family: "blade",   twoHanded: true },
+    { key: "axe",      label: "Axe",       gameType: "weapon",     icon: "axe",
+      slot: "mainhand",  family: "axe" },
+    { key: "mace",     label: "Mace",      gameType: "weapon",     icon: "mace",
+      slot: "mainhand",  family: "blunt" },
+    { key: "dagger",   label: "Dagger",    gameType: "weapon",     icon: "dagger",
+      slot: "mainhand",  family: "dagger" },
+    { key: "spear",    label: "Spear",     gameType: "weapon",     icon: "spear",
+      slot: "mainhand",  family: "polearm" },
+    { key: "bow",      label: "Bow",       gameType: "weapon",     icon: "bow",
+      slot: "mainhand",  family: "bow",    twoHanded: true },
+    { key: "staff",    label: "Staff",     gameType: "weapon",     icon: "staff",
+      slot: "mainhand",  family: "staff",  twoHanded: true },
+    { key: "wand",     label: "Wand",      gameType: "weapon",     icon: "wand",
+      slot: "mainhand",  family: "wand" },
+    { key: "ring",     label: "Ring",      gameType: "trinket",    icon: "ring",
+      slot: "ring" },
+    { key: "amulet",   label: "Amulet",    gameType: "trinket",    icon: "amulet",
+      slot: "neck" },
+    { key: "gem",      label: "Gem",       gameType: "trinket",    icon: "gem",
+      slot: "ring" },
     { key: "potion",   label: "Potion",    gameType: "potion",     icon: "potion" },
     { key: "scroll",   label: "Scroll",    gameType: "consumable", icon: "scroll" },
     { key: "tome",     label: "Tome",      gameType: "quest",      icon: "tome" }
@@ -318,6 +364,26 @@ const Content = (function () {
   }
   function saveConfig(c) { Store.set(KEYS.config, c); return c; }
 
+  /* ------------------------------------------------------------- portraits
+
+     Monsters carry their own picture on the row. A **class** has no row —
+     Warrior, Rogue and Mage are constants in js/player/classes.js — so their
+     portraits live in one small map of their own, keyed `class:Warrior`.
+
+     A map rather than a table because there is nothing to CRUD: you cannot
+     add a class from the editor, only give one a face. Anything else that
+     needs a face without a row of its own can use the same map with its own
+     key prefix. */
+  function portraits() { return Store.get(KEYS.portraits, {}) || {}; }
+  function portrait(key) { return portraits()[key] || ""; }
+  function setPortrait(key, url) {
+    const all = portraits();
+    if (url) all[key] = url; else delete all[key];
+    Store.set(KEYS.portraits, all);
+    return all;
+  }
+  function classPortrait(cls) { return portrait("class:" + cls); }
+
   /* ------------------------------------------------------------- scaling */
   function scaleOf(rarity) {
     const c = config();
@@ -396,7 +462,12 @@ const Content = (function () {
       baseHp: 30, armor: 3,
       attackName: "Strike", attackMin: 4, attackMax: 8, damageType: "physical",
       expReward: 80, goldReward: 20,
-      lootTableId: ""
+      lootTableId: "",
+      /* The picture in the middle of the token. A path under art/, or an
+         uploaded image shrunk to 256 px — same field either way, exactly as a
+         location's art works. Blank means the emoji above is still the face,
+         which is what every monster looked like before portraits existed. */
+      portrait: ""
     };
   }
   function blankLootTable() {
@@ -405,6 +476,12 @@ const Content = (function () {
   function blankItem() {
     return {
       itemId: "", name: "", gearType: "sword", iconKey: "sword", rarity: "common",
+      /* What it asks of the wearer. Empty weight/family means "whatever the
+         gear type says"; an empty reqClasses means "whoever the weight and
+         family allow", which is the usual case. */
+      weight: "", reqClasses: [], reqLevel: 0,
+      reqStrength: 0, reqDexterity: 0, reqConstitution: 0,
+      reqIntelligence: 0, reqWisdom: 0, reqCharisma: 0, reqLuck: 0,
       damageType: "slashing", damageMin: 3, damageMax: 6,
       armor: 0, resistance: 0,
       restoreHp: 0, restoreMana: 0, restoreStamina: 0,
@@ -1066,10 +1143,24 @@ const Content = (function () {
     if (stats.resistance) parts.push("+" + stats.resistance + " RES");
     if (restore) for (const k in restore) parts.push("+" + restore[k] + " " + k.toUpperCase());
 
+    /* Requirements: the authored numbers, falling back to the gear type's own
+       weight and family so an item authored before any of this existed still
+       lands in the right slot with sane rules. */
+    const req = {};
+    REQ_ATTRS.forEach(a => {
+      const v = +def[a.field] || 0;
+      if (v) req[a.key] = v;
+    });
+
     return {
       itemId: newId("inst"), defId: def.itemId, name: def.name,
       type: slot.gameType === "consumable" || slot.gameType === "quest" ? "potion" : slot.gameType,
       gearType: def.gearType, iconKey: def.iconKey, icon: null,
+      slot: slot.slot || null,
+      weight: def.weight || slot.weight || "",
+      family: def.family || slot.family || "",
+      twoHanded: def.twoHanded != null ? !!def.twoHanded : !!slot.twoHanded,
+      req, reqClasses: def.reqClasses || [], reqLevel: +def.reqLevel || 0,
       rarity: def.rarity, level: +def.itemLevel || level || 1,
       damageType: def.damageType, dmgMin, dmgMax,
       stats, restore,
@@ -1102,6 +1193,10 @@ const Content = (function () {
     return {
       enemyId: newId("enm"), defId: def.monsterId,
       name: def.name, icon: def.icon || "👹",
+      /* Carried onto the enemy so the fight can show a face without going
+         back to the table for it — the same reason `icon` is carried. */
+      portrait: def.portrait || "",
+      difficulty: clamp(Math.round(+nodeDifficulty || 1), 1, 10),
       level, boss: !!def.isBoss, authored: true,
       monsterType: def.type, rarity: def.rarity,
       attackName: def.attackName || "Strike", damageType: def.damageType,
@@ -1177,6 +1272,18 @@ const Content = (function () {
     return pack;
   }
 
+  /** The first picture in a spawn table, or "" if nobody in it has one. */
+  function portraitForTable(tableId) {
+    if (!tableId) return "";
+    const t = get("spawns", tableId);
+    const ids = (t && t.monsters) || [];
+    for (const id of ids) {
+      const m = get("monsters", id);
+      if (m && m.portrait) return m.portrait;
+    }
+    return "";
+  }
+
   /* --------------------------------------------------------------- locations */
   function locationsFor(zoneId) {
     return read("locations").filter(l => !l.zoneId || l.zoneId === zoneId);
@@ -1245,6 +1352,11 @@ const Content = (function () {
           : (building ? building.icon : site.icon),
       isQuestGiver: !!loc.isQuestGiver,
       buildingType: loc.buildingType,
+      /* What the site wears on the map, when it wears a face. A site does not
+         know which monster it will roll until you engage it, so this is the
+         first portrait in its own spawn table — "what lives here", not "what
+         you will fight". Sites with no table keep their emoji. */
+      portrait: portraitForTable(loc.spawnTableId),
       spawnTableId: loc.spawnTableId || "",
       chestTier: loc.chestTier || "", chestLootTableId: loc.chestLootTableId || "",
       status: "undiscovered",
@@ -1303,6 +1415,7 @@ const Content = (function () {
 
   return {
     KEYS, ID_KEY, RARITY, RARITY_ORDER, DEFAULT_SCALE, MONSTER_TYPES, DAMAGE_TYPES, MAGIC_DAMAGE,
+    REQ_ATTRS,
     GEAR_SLOTS, ICONS, ICON_KEYS,
     config, saveConfig, scaleOf, effective,
     iconSvg, itemIconHtml, rarityColor, rarityName, slotDef, newId,
@@ -1323,6 +1436,7 @@ const Content = (function () {
     spawnOdds, pickWeighted, rollSpawn,
     locationsFor, isLocationActive, respawnAt, chestTier, locationToNode, minutesOf,
     locationImageBounds, imageIsInline,
+    portraits, portrait, setPortrait, classPortrait,
     rollLoot, toGameItem, toEnemy, monstersFor,
     exportAll, importAll, stats, isEmpty, exists, clearAll
   };

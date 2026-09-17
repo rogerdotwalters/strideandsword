@@ -17,6 +17,12 @@ const Bestiary = {
     const hp = Math.round(t.hp * scale);
     return {
       enemyId: uid("enm"), name: t.name, icon: t.icon, level: lvl, boss: !!t.boss,
+      /* The fallback bestiary has no art — it is the thing that keeps working
+         with an empty database — but it still carries the fields a face is
+         drawn from, so nothing downstream has to ask which kind of enemy it
+         has in its hand. */
+      portrait: t.portrait || "",
+      difficulty: clamp(Math.round(+difficulty || 1), 1, 10),
       hp, maxHp: hp, attributes, alive: true, tempEvasion: 0, slowed: 0,
       attackPower: attributes.strength * 1.25 + attributes.dexterity * 0.5 + difficulty * 1.4,
       spellPower:  attributes.intelligence * 1.3 + attributes.wisdom * 0.4,
@@ -43,6 +49,20 @@ const Bestiary = {
       const pack = Content.rollSpawn(node.spawnTableId,
         node.type === "boss" ? node.difficulty + 3 : node.difficulty, playerLevel);
       if (pack.length) return pack;
+    }
+    /* Otherwise the ground decides. A site in a marsh rolls from the marsh,
+       one in a hayfield from the fields — same generator, same site, different
+       thing waiting on it. Nothing is drawn over most of the world, and
+       `tableAt` returns "" there, which falls straight through to the ordinary
+       difficulty-banded pick below. */
+    if (typeof Regions !== "undefined" && node.latitude != null) {
+      const tableId = Regions.tableAt(node.latitude, node.longitude);
+      if (tableId) {
+        const bump = Regions.difficultyAt(node.latitude, node.longitude);
+        const d = (node.type === "boss" ? node.difficulty + 3 : node.difficulty) + bump;
+        const pack = Content.rollSpawn(tableId, clamp(d, 1, 10), playerLevel);
+        if (pack.length) return pack;
+      }
     }
     const authored = Content.monstersFor(node, playerLevel);
     if (authored.length) return this.packFromAuthored(authored, node, playerLevel);

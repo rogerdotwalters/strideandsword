@@ -367,7 +367,10 @@ async function goTo(page, lat, lng, now) {
       return {
         far: far.length, near: near.length, sight,
         unknownPins: document.querySelectorAll('.pin.unknown').length,
-        knownPins: document.querySelectorAll('.pinWrap .pin:not(.unknown)').length,
+        /* Two shapes of known pin since creatures got faces: a live combat or
+           boss site wears the circular token (`.tok.site`), everything else
+           keeps the square badge. Both mean "you can see what this is". */
+        knownPins: document.querySelectorAll('.pinWrap .pin:not(.unknown), .pinWrap .tok.site').length,
         agrees: far.every(n => SS.Game.inSight(n) === false) && near.every(n => SS.Game.inSight(n) === true)
       };
     });

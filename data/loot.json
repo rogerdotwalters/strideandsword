@@ -1,7 +1,7 @@
 [
   {
-    "lootTableId": "lt_seed_vermin",
-    "name": "Vermin Scraps",
+    "lootTableId": "lt_seed_scraps",
+    "name": "Scavenged Scraps",
     "dropsMin": 0,
     "dropsMax": 2,
     "loot": [
@@ -26,8 +26,8 @@
     "updatedAt": 1789010691206
   },
   {
-    "lootTableId": "lt_seed_office",
-    "name": "Office Salvage",
+    "lootTableId": "lt_seed_wayside",
+    "name": "Wayside Spoils",
     "dropsMin": 1,
     "dropsMax": 3,
     "loot": [
@@ -60,8 +60,8 @@
     "updatedAt": 1789010691206
   },
   {
-    "lootTableId": "lt_seed_deep",
-    "name": "Deep Floor Cache",
+    "lootTableId": "lt_seed_barrow",
+    "name": "Barrow Cache",
     "dropsMin": 1,
     "dropsMax": 3,
     "loot": [
@@ -90,8 +90,8 @@
     "updatedAt": 1789010691206
   },
   {
-    "lootTableId": "lt_seed_executive",
-    "name": "Executive Hoard",
+    "lootTableId": "lt_seed_hoard",
+    "name": "Hoard of the Deep",
     "dropsMin": 2,
     "dropsMax": 4,
     "loot": [

@@ -315,3 +315,109 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
   .respRow{grid-template-columns:1fr 1fr;}
   .respRow button{grid-column:2;justify-self:end}
 }
+
+/* The face components, copied from css/game.css because the editors do not
+   load it and the preview has to look like the game. Keep the two in step:
+   they are the same component, and a portrait that looks different in the
+   editor is a portrait you will re-crop for nothing. */
+
+/* ---------- 7c. Faces: tokens on the map, portraits in the panels ----------
+
+   One creature, two presentations. A **token** is a circle with a coloured
+   ring for the map, where it is a dot among other dots and has to read at
+   34 px. A **portrait** is a framed rectangle showing the whole picture, for
+   the combat screen and the panels, where there is room to look at it.
+
+   The ring colour is difficulty, 1–10, green through amber to red — set by
+   `Art.difficultyColor` as `--ring`. Zero means it is not a fight and takes
+   the blue everything friendly uses.
+
+   The bevel is three shadows, and the order matters: a drop shadow underneath
+   the whole thing, a light inset along the top of the ring and a dark one
+   along its bottom (so the ring reads as a raised bezel), then the opposite
+   pair inside the well (so the picture reads as set *into* it). Flat colour
+   with a border looked like a sticker; this looks like a coin. */
+
+.tok{
+  --tokSize:34px;
+  --ring:#4a8fd4;
+  width:var(--tokSize);height:var(--tokSize);border-radius:50%;
+  padding:2.5px;box-sizing:border-box;flex:none;position:relative;
+  background:
+    radial-gradient(circle at 50% 18%,rgba(255,255,255,.4),rgba(255,255,255,0) 58%),
+    linear-gradient(165deg,var(--ring),rgba(0,0,0,.62) 86%);
+  box-shadow:
+    0 3px 9px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.45),
+    inset 0 -1.5px 1px rgba(0,0,0,.55);
+  transition:transform .2s ease,box-shadow .2s ease;
+}
+.tok .tokIn{
+  width:100%;height:100%;border-radius:50%;overflow:hidden;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(circle at 50% 22%,#26334a,#141b28 78%),
+    #141b28;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.7),inset 0 -2px 3px rgba(255,255,255,.07);
+}
+/* Leaflet resets `width:auto` on every img inside its marker pane — a fix for
+   tiles in Firefox — with a selector more specific than this one, so a
+   portrait in a map pin came out at its natural 256 px and swamped the map.
+   Hence the shouting, for the same reason `.pinWrap` shouts. */
+.tok img{width:100%!important;height:100%!important;object-fit:cover;display:block}
+.tok .em{font-size:calc(var(--tokSize) * .48);line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+.tok .tokBadge{
+  position:absolute;right:-3px;bottom:-3px;min-width:15px;height:15px;padding:0 3px;
+  border-radius:8px;background:#141b28;border:1px solid var(--ring);
+  font-family:var(--mono);font-size:9px;font-weight:700;color:var(--ink);
+  display:grid;place-items:center;line-height:1;
+}
+.tok.inrange{
+  transform:scale(1.1);
+  box-shadow:
+    0 0 0 4px rgba(84,179,122,.2),0 3px 9px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1.5px 1px rgba(0,0,0,.55);
+}
+.tok.dead{opacity:.4;filter:grayscale(1)}
+
+.port{
+  --portW:56px;--portH:70px;
+  --ring:#4a8fd4;
+  width:var(--portW);height:var(--portH);flex:none;position:relative;
+  border-radius:11px;padding:2.5px;box-sizing:border-box;
+  background:
+    radial-gradient(120% 60% at 50% 0%,rgba(255,255,255,.34),rgba(255,255,255,0) 62%),
+    linear-gradient(165deg,var(--ring),rgba(0,0,0,.62) 88%);
+  box-shadow:
+    0 4px 12px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,255,255,.4),
+    inset 0 -1.5px 1px rgba(0,0,0,.5);
+}
+.port .portIn{
+  width:100%;height:100%;border-radius:9px;overflow:hidden;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(90% 70% at 50% 14%,#243046,#10151f 76%),
+    #10151f;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.72),inset 0 -2px 3px rgba(255,255,255,.06);
+}
+/* `contain`, not `cover`: this is the view where the whole picture is meant
+   to be visible. Cropping it into a square is what the token is for. */
+.port img{width:100%!important;height:100%!important;object-fit:contain;display:block}
+.port .em{font-size:calc(var(--portW) * .5);line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
+.port .portBadge{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:-7px;
+  padding:1px 7px;border-radius:8px;background:#141b28;border:1px solid var(--ring);
+  font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--ink);white-space:nowrap;
+}
+.port.dead{opacity:.38;filter:grayscale(1)}
+
+/* Portraits: the grid on the Portraits tab, and the two previews on a
+   monster's form. */
+.portGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.portCard{display:flex;gap:14px;align-items:flex-start;padding:13px;border:1px solid var(--line);
+  border-radius:var(--r-lg);background:var(--bg-2)}
+.portCard b{font-size:13.5px}
+.portCard .tiny{margin:3px 0 9px;word-break:break-word}
+.portActs{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.portRow{display:flex;gap:14px;align-items:flex-start;margin:0 0 11px}

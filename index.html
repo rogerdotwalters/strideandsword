@@ -6,6 +6,13 @@
 <meta name="theme-color" content="#0b0e14">
 <title>Stride &amp; Sword</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<!-- One display face, for the one place the game raises its voice: the
+     "Traveling" veil. Everything else uses the system stack. If this never
+     arrives — offline, blocked, a corporate proxy — the veil falls back to a
+     serif of the same shape and nothing else on the page notices. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
 <link rel="stylesheet" href="css/game.css">
 </head>
 <body>
@@ -30,6 +37,7 @@
 <script src="js/world/location.js"></script>
 <script src="js/world/art.js"></script>
 <script src="js/world/shapes.js"></script>
+<script src="js/world/regions.js"></script>
 <script src="js/world/haunts.js"></script>
 <script src="js/world/placement.js"></script>
 <script src="js/world/spawner.js"></script>
@@ -38,11 +46,13 @@
 <script src="js/world/instances.js"></script>
 <script src="js/world/quests.js"></script>
 <script src="js/world/denizens.js"></script>
+<script src="js/world/buildings.js"></script>
 <script src="js/ui/ui.js"></script>
 <script src="js/ui/screens.js"></script>
 <script src="js/ui/game.js"></script>
 <script src="js/ui/nodes.js"></script>
 <script src="js/ui/questui.js"></script>
+<script src="js/ui/tradeui.js"></script>
 <script src="js/ui/panels.js"></script>
 <script src="js/combat/fight.js"></script>
 <script src="js/dev/devpanel.js"></script>

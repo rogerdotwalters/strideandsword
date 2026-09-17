@@ -19,9 +19,16 @@ Object.assign(Game, {
     const cleared = n.status === "cleared";
 
     const typeLabel = { combat: "Combat site", treasure: "Cache", boss: "Boss lair", landmark: "Landmark" }[n.type];
+    /* A site with something waiting on it shows the framed face, the same as
+       the map shows the token; a cache or a landmark is a place and keeps the
+       plain avatar. */
+    const fight = (n.type === "combat" || n.type === "boss") && !cleared;
     let body =
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
-        '<div class="avatar" style="width:46px;height:46px;font-size:24px">' + n.icon + "</div>" +
+        (fight
+          ? Art.portraitHtml({ image: n.portrait, icon: n.icon, difficulty: n.difficulty,
+                               w: 58, h: 71 })
+          : '<div class="avatar" style="width:46px;height:46px;font-size:24px">' + n.icon + "</div>") +
         "<div><b style='font-size:15px'>" + esc(n.name) + "</b><br>" +
         '<span class="tiny dim">' + typeLabel +
         (n.type !== "landmark" ? " · Difficulty " + n.difficulty + "/10" : "") + "</span></div></div>" +

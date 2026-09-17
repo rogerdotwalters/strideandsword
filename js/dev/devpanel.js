@@ -29,6 +29,10 @@ Object.assign(Game, {
           '<button class="btn sm" id="dvWander">Wander</button>' +
           '<button class="btn sm danger" id="dvStop">Stop</button>' +
           '<button class="btn sm ghost" id="dvSeed">Seed data</button>' +
+          /* Simulated fixes are teleports, so they can never raise a speed —
+             which is right for every other test and leaves no way to see the
+             travelling veil from a desk. This is that way. */
+          '<button class="btn sm ghost" id="dvDrive">Drive</button>' +
         "</div>" +
         // Everything you have authored, in one list, with a way straight to it.
         // This is the whole point of the dev panel: place something in the map
@@ -82,6 +86,13 @@ Object.assign(Game, {
     $("#dvWander").onclick = () => this.wander();
     $("#dvStop").onclick = () => { if (this._simWalk) { clearInterval(this._simWalk); this._simWalk = null; UI.toast("Sim stopped.", "info", 1400); } };
     $("#dvSeed").onclick = () => this.seedTestData();
+    $("#dvDrive").onclick = () => {
+      const on = !Loc.travelling;
+      // Fake the reading as well as the state, or the veil reads "0 km/h".
+      Loc.speedMps = on ? (+settings().travelEnterKph || 16) / 3.6 * 2.4 : 0;
+      Loc.setTravelling(on);
+      UI.toast(on ? "Pretending to be in a car." : "Out of the car.", "info", 1600);
+    };
 
     $("#dvChunkSync").onclick = () => {
       UI.toast("Surveying…", "info", 1600);

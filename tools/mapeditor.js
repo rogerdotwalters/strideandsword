@@ -575,7 +575,13 @@ async function clickMap(page, dx, dy) {
     const r = await g.evaluate(() => {
       const c = SS.Game.ch;
       c.inventory = [];
-      const table = SS.Content.list('loot')[0];
+      /* A table that always drops something. The first seeded table has
+         dropsMin 0 — a legitimate empty chest — and asserting "not empty"
+         against it is a coin flip, which is how this step became the one
+         intermittent failure in the suite. What is being tested is where the
+         drops come from, not whether the dice were kind. */
+      const loots = SS.Content.list('loot');
+      const table = loots.find(t => (+t.dropsMin || 0) >= 1) || loots[0];
       const loc = SS.Content.list('locations')[0];
       loc.kind = 'treasure'; loc.chestTier = 'gilded'; loc.chestLootTableId = table.lootTableId;
       SS.Content.save('locations', loc);

@@ -45,7 +45,7 @@
 
 /* Expose a few internals for console poking / test harnesses. */
 window.SS = { Store, API, Local, Auth, Game, Combat, Dungeon, Instance, Loc, Walk, Zones, Characters,
-              Calc, Items, Bestiary, Screens, Atlas, OSM, Content, DB, Art, Grid, Chunks, Shapes, Haunts, Quests, Denizens,
+              Calc, Items, Bestiary, Screens, Atlas, OSM, Content, DB, Art, Grid, Chunks, Shapes, Regions, Haunts, Quests, Denizens, Buildings,
               Placement, Spawner, Panels, UI,
               // The geo helpers are top-level `const`s, so they never reach
               // `window` on their own — and anything poking at the world from

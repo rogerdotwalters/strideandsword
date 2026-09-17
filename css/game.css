@@ -144,6 +144,12 @@ h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:.2px}
 .pick p{margin:6px 0 8px;font-size:12.5px;color:var(--ink-2);line-height:1.45}
 .pick .mods{display:flex;flex-wrap:wrap;gap:5px}
 .pick .mods span{font-size:10.5px;padding:2px 6px;border-radius:4px;background:var(--bg-4);color:var(--ink-2);font-family:var(--mono)}
+/* With a portrait in it the row becomes a two-column grid: the face down the
+   left, everything that was already there down the right. */
+.pick.withFace{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start}
+.pick.withFace .pickFace{grid-row:1 / span 4}
+.pick.withFace h4,.pick.withFace p,.pick.withFace .mods,.pick.withFace .btn{grid-column:2}
+.pick.withFace .btn{justify-self:start}
 
 .attrRow{
   display:grid;grid-template-columns:1fr auto auto auto auto;
@@ -187,6 +193,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:.2px}
   width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
   font-size:16px;background:var(--bg-4);border:1px solid var(--line-2);flex:none;
 }
+.chFace{display:flex;flex:none}
 .charChip .who{line-height:1.25;min-width:0}
 .charChip .who b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
 .charChip .who span{font-size:10.5px;color:var(--ink-3)}
@@ -220,6 +227,11 @@ h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:.2px}
 .slHead .btn{padding:3px 8px;font-size:11px}
 .slBody{overflow-y:auto;padding:5px}
 .slEmpty{padding:14px 12px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+/* The ground under your feet, above the list of what is standing on it. */
+.slGround{display:flex;align-items:center;gap:9px;padding:8px 10px;margin:0 0 4px;
+  border-bottom:1px solid var(--line);background:rgba(84,179,122,.05)}
+.slGround .slText b{font-size:12.5px}
+.slGround .slNote{text-transform:uppercase;letter-spacing:.8px;font-size:9.5px}
 .slRow{
   width:100%;display:flex;align-items:center;gap:9px;text-align:left;
   padding:8px 9px;border:1px solid transparent;border-radius:var(--r);
@@ -522,6 +534,43 @@ body.inInstance .zoomModes{display:none}
 .popTitle{font-weight:700;margin-bottom:2px}
 .popMeta{font-size:11.5px;color:var(--ink-3);margin-bottom:8px}
 
+/* ---------- 5b. Travelling ----------
+   The veil that drops when you are in a car. Above the map and the HUD, below
+   modals (1000) on purpose: the menu and the settings panel still open over it,
+   so the switch that turns this off is reachable while it is up. */
+#travelVeil{
+  position:absolute;inset:0;z-index:900;display:grid;place-items:center;padding:24px;
+  background:radial-gradient(1200px 600px at 50% 40%,rgba(18,23,34,.86),rgba(5,7,11,.94));
+  backdrop-filter:blur(7px) saturate(.55);-webkit-backdrop-filter:blur(7px) saturate(.55);
+  animation:fin .35s ease;text-align:center;
+}
+.tvInner{max-width:440px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.tvRule{
+  width:min(280px,70vw);height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold-dim),transparent);
+}
+.tvWord{
+  /* Cinzel is the carved-serif face loaded in index.html; the fallbacks are
+     the same shape a phone will already have if it never arrives. */
+  font-family:Cinzel,"Trajan Pro",Georgia,"Times New Roman",serif;
+  font-size:clamp(32px,10.5vw,58px);line-height:1.1;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;padding:6px 0 4px;
+  background:linear-gradient(180deg,#f7e0aa,#e0a33e 55%,#9c6d20);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 14px rgba(224,163,62,.28));
+  animation:tvBreathe 4.5s ease-in-out infinite;
+}
+@keyframes tvBreathe{0%,100%{opacity:.82}50%{opacity:1}}
+.tvSpeed{font-size:14px;color:var(--gold);letter-spacing:1.5px;margin-top:2px}
+.tvNote{font-size:12.5px;line-height:1.75;color:var(--ink-2);margin:6px 0 0}
+.tvNote.dimmer{color:var(--ink-3);margin-top:2px}
+/* The map underneath keeps moving; there is no reason for it to be legible. */
+body.travelling .bars,body.travelling .topBar{filter:saturate(.5) brightness(.75)}
+@media (prefers-reduced-motion:reduce){
+  #travelVeil{animation:none}
+  .tvWord{animation:none;opacity:1}
+}
+
 /* ---------- 6. Modals ---------- */
 .modalBack{
   position:absolute;inset:0;z-index:1000;background:rgba(5,7,11,.82);
@@ -554,7 +603,9 @@ body.inInstance .zoomModes{display:none}
 }
 .cbHead{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .cbHead h3{font-size:15px;flex:1}
-.cbEnemies{padding:14px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;flex:none;max-height:38vh}
+/* Taller rows since the enemy grew a portrait, so the list needs a little
+   more room before it starts scrolling. */
+.cbEnemies{padding:14px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;flex:none;max-height:46vh}
 .enemy{
   display:flex;align-items:center;gap:11px;padding:10px 12px;
   background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-lg);
@@ -564,7 +615,12 @@ body.inInstance .zoomModes{display:none}
 .enemy.target{border-color:var(--blood);background:linear-gradient(90deg,rgba(200,69,60,.14),var(--bg-2))}
 .enemy.hit{animation:shake .3s}
 @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
-.enemy .face{width:38px;height:38px;border-radius:var(--r);display:grid;place-items:center;font-size:21px;background:var(--bg-4);flex:none}
+/* The enemy's face is a framed portrait now — see section 7c. The row got
+   taller with it, which is the point: a picture you cannot see is not worth
+   drawing. */
+.enemy .face{margin-right:1px}
+.cbYou{display:flex;align-items:center;gap:12px;margin-bottom:11px}
+.cbYou .cbBars{flex:1;min-width:0}
 .enemy .info{flex:1;min-width:0}
 .enemy .info .top{display:flex;align-items:baseline;gap:7px}
 .enemy .info b{font-size:13.5px}
@@ -601,16 +657,115 @@ body.inInstance .zoomModes{display:none}
   100%{opacity:0;transform:translateY(-40px) scale(1)}
 }
 
+
+/* ---------- 7c. Faces: tokens on the map, portraits in the panels ----------
+
+   One creature, two presentations. A **token** is a circle with a coloured
+   ring for the map, where it is a dot among other dots and has to read at
+   34 px. A **portrait** is a framed rectangle showing the whole picture, for
+   the combat screen and the panels, where there is room to look at it.
+
+   The ring colour is difficulty, 1–10, green through amber to red — set by
+   `Art.difficultyColor` as `--ring`. Zero means it is not a fight and takes
+   the blue everything friendly uses.
+
+   The bevel is three shadows, and the order matters: a drop shadow underneath
+   the whole thing, a light inset along the top of the ring and a dark one
+   along its bottom (so the ring reads as a raised bezel), then the opposite
+   pair inside the well (so the picture reads as set *into* it). Flat colour
+   with a border looked like a sticker; this looks like a coin. */
+
+.tok{
+  --tokSize:34px;
+  --ring:#4a8fd4;
+  width:var(--tokSize);height:var(--tokSize);border-radius:50%;
+  padding:2.5px;box-sizing:border-box;flex:none;position:relative;
+  background:
+    radial-gradient(circle at 50% 18%,rgba(255,255,255,.4),rgba(255,255,255,0) 58%),
+    linear-gradient(165deg,var(--ring),rgba(0,0,0,.62) 86%);
+  box-shadow:
+    0 3px 9px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.45),
+    inset 0 -1.5px 1px rgba(0,0,0,.55);
+  transition:transform .2s ease,box-shadow .2s ease;
+}
+.tok .tokIn{
+  width:100%;height:100%;border-radius:50%;overflow:hidden;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(circle at 50% 22%,#26334a,#141b28 78%),
+    #141b28;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.7),inset 0 -2px 3px rgba(255,255,255,.07);
+}
+/* Leaflet resets `width:auto` on every img inside its marker pane — a fix for
+   tiles in Firefox — with a selector more specific than this one, so a
+   portrait in a map pin came out at its natural 256 px and swamped the map.
+   Hence the shouting, for the same reason `.pinWrap` shouts. */
+.tok img{width:100%!important;height:100%!important;object-fit:cover;display:block}
+.tok .em{font-size:calc(var(--tokSize) * .48);line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+.tok .tokBadge{
+  position:absolute;right:-3px;bottom:-3px;min-width:15px;height:15px;padding:0 3px;
+  border-radius:8px;background:#141b28;border:1px solid var(--ring);
+  font-family:var(--mono);font-size:9px;font-weight:700;color:var(--ink);
+  display:grid;place-items:center;line-height:1;
+}
+.tok.inrange{
+  transform:scale(1.1);
+  box-shadow:
+    0 0 0 4px rgba(84,179,122,.2),0 3px 9px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1.5px 1px rgba(0,0,0,.55);
+}
+.tok.dead{opacity:.4;filter:grayscale(1)}
+
+.port{
+  --portW:56px;--portH:70px;
+  --ring:#4a8fd4;
+  width:var(--portW);height:var(--portH);flex:none;position:relative;
+  border-radius:11px;padding:2.5px;box-sizing:border-box;
+  background:
+    radial-gradient(120% 60% at 50% 0%,rgba(255,255,255,.34),rgba(255,255,255,0) 62%),
+    linear-gradient(165deg,var(--ring),rgba(0,0,0,.62) 88%);
+  box-shadow:
+    0 4px 12px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,255,255,.4),
+    inset 0 -1.5px 1px rgba(0,0,0,.5);
+}
+.port .portIn{
+  width:100%;height:100%;border-radius:9px;overflow:hidden;
+  display:grid;place-items:center;
+  background:
+    radial-gradient(90% 70% at 50% 14%,#243046,#10151f 76%),
+    #10151f;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.72),inset 0 -2px 3px rgba(255,255,255,.06);
+}
+/* `contain`, not `cover`: this is the view where the whole picture is meant
+   to be visible. Cropping it into a square is what the token is for. */
+.port img{width:100%!important;height:100%!important;object-fit:contain;display:block}
+.port .em{font-size:calc(var(--portW) * .5);line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
+.port .portBadge{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:-7px;
+  padding:1px 7px;border-radius:8px;background:#141b28;border:1px solid var(--ring);
+  font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--ink);white-space:nowrap;
+}
+.port.dead{opacity:.38;filter:grayscale(1)}
+
 /* ---------- 8. Inventory / sheet ---------- */
-.slotRow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+/* Twelve slots, so they are cards in a grid rather than three wide boxes:
+   two per row on a phone, four on anything with room. */
+.slotRow{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:14px}
+@media (min-width:560px){.slotRow{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:820px){.slotRow{grid-template-columns:repeat(4,1fr)}}
 .slot{
   background:var(--bg-3);border:1px dashed var(--line-2);border-radius:var(--r);
-  padding:10px;min-height:72px;text-align:left;display:flex;flex-direction:column;gap:3px;
+  padding:8px 9px;min-height:64px;text-align:left;display:flex;flex-direction:column;gap:2px;
 }
 .slot.filled{border-style:solid}
+/* The off hand while both hands are on a greatsword: present, and plainly
+   not available, which is easier to read than the slot quietly missing. */
+.slot.locked{opacity:.45;border-style:dotted}
 .slot .sl{font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3)}
-.slot .nmv{font-size:12.5px;font-weight:600;line-height:1.25}
-.slot .stt{font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+.slot .nmv{font-size:12px;font-weight:600;line-height:1.25}
+.slot .stt{font-family:var(--mono);font-size:10px;color:var(--ink-2)}
 
 .itemList{display:flex;flex-direction:column;gap:6px}
 .item{
@@ -621,6 +776,10 @@ body.inInstance .zoomModes{display:none}
 .item .body{flex:1;min-width:0}
 .item .body .nm{font-size:13px;font-weight:600}
 .item .body .ds{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+/* What a piece asks of you: weight, two-handedness, attribute minimums. */
+.item .body .rq{font-size:10px;color:var(--ink-3);letter-spacing:.3px;margin-top:1px}
+.item.cantWear{opacity:.62}
+.item.cantWear .body .nm{color:var(--ink-3)}
 .item .acts{display:flex;gap:5px;flex:none}
 .r-common{border-left-color:var(--rare-common)}
 .r-uncommon{border-left-color:var(--rare-uncommon)}
@@ -776,16 +935,23 @@ input[type=range]{accent-color:var(--gold);height:22px}
 .qlPast .nm{flex:1;min-width:0;color:var(--ink-2)}
 
 /* ---------- the living world ----------
-   Round, so it reads as something alive rather than a place on the map: every
-   other pin here is a square-ish badge. */
-.denizenPin{
-  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+   A denizen wears the circular token from section 7c — round, so it reads as
+   something alive rather than a place on the map. The flat `.denizenPin` that
+   used to be here went with it; the ring, the bevel and the in-range halo all
+   live on `.tok` now. */
+/* A building. Square where the living things are round, so a glance at the
+   map tells you which is which before you read either. */
+.bldPin{
+  width:32px;height:32px;border-radius:9px;display:grid;place-items:center;
   font-size:16px;border:2px solid var(--line-2);background:rgba(26,33,48,.96);
-  box-shadow:0 3px 10px rgba(0,0,0,.6);transition:transform .25s ease;
+  box-shadow:0 3px 10px rgba(0,0,0,.6);position:relative;
 }
-.denizenPin.creature{border-color:#8a6524}
-.denizenPin.character{border-color:var(--mana)}
-.denizenPin.inrange{
-  border-color:var(--ok);transform:scale(1.12);
-  box-shadow:0 0 0 4px rgba(84,179,122,.18),0 3px 10px rgba(0,0,0,.6);
+.bldPin .lv{
+  position:absolute;right:-5px;bottom:-5px;min-width:15px;height:15px;padding:0 3px;
+  border-radius:8px;background:var(--bg-2);border:1px solid var(--line-2);
+  font-size:9px;font-weight:700;display:grid;place-items:center;color:var(--gold);
 }
+.tradeHead{
+  margin:16px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-3);
+}
+

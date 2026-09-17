@@ -16,7 +16,11 @@ const Ed = {
     loot:     { col: "name", dir: 1 },
     items:    { col: "name", dir: 1 },
     spawns:   { col: "name", dir: 1 },
-    quests:   { col: "name", dir: 1 }
+    quests:   { col: "name", dir: 1 },
+    /* Not a CRUD tab, and it still needs an entry: the sort map is read
+       before the tab is dispatched, and a missing key is how the Spawns tab
+       threw on the day it was added. */
+    portraits: { col: "name", dir: 1 }
   },
 
   /** True when the window is too narrow for two panes side by side. */
@@ -102,7 +106,7 @@ const Ed = {
     this.renderList();
     this.renderForm();
     this.renderStatus();
-    $("#edForm").classList.toggle("hidden", this.tab === "rarity");
+    $("#edForm").classList.toggle("hidden", this.tab === "rarity" || this.tab === "portraits");
   },
 
   renderTabs() {
@@ -113,6 +117,7 @@ const Ed = {
       ["items", "Items", s.items],
       ["spawns", "Spawns", s.spawns],
       ["quests", "Quests", Content.list("quests").length],
+      ["portraits", "Portraits", Object.keys(Content.portraits()).length || null],
       ["rarity", "Rarity", null]
     ];
     const host = $("#edTabs");
@@ -124,6 +129,12 @@ const Ed = {
 
   renderListBar() {
     const bar = $("#edListBar");
+    if (this.tab === "portraits") {
+      bar.innerHTML = '<b style="font-size:13px">Class portraits</b>' +
+        '<div class="spacer"></div>' +
+        '<span class="tiny dimmer">Monster portraits live on the monster.</span>';
+      return;
+    }
     if (this.tab === "rarity") {
       bar.innerHTML = '<b style="font-size:13px">Rarity tiers &amp; monster scaling</b>' +
         '<div class="spacer"></div>' +
@@ -188,6 +199,7 @@ const Ed = {
   renderList() {
     const wrap = $("#edListWrap");
     if (this.tab === "rarity") { this.renderRarity(wrap); return; }
+    if (this.tab === "portraits") { this.renderPortraits(wrap); return; }
 
     const rows = this.rows();
     const cnt = $("#edCount");
@@ -533,7 +545,7 @@ Object.assign(Ed, {
 
   renderForm() {
     const host = $("#edForm");
-    if (this.tab === "rarity") { host.innerHTML = ""; return; }
+    if (this.tab === "rarity" || this.tab === "portraits") { host.innerHTML = ""; return; }
     if (!this.draft) {
       const noun = { monsters: "monster", loot: "loot table", items: "item",
                    spawns: "spawn table", quests: "quest" }[this.tab];
@@ -557,9 +569,23 @@ Object.assign(Ed, {
     host.innerHTML =
       this.formHeader(this.isNew ? "New monster" : d.name) +
       '<div class="row2">' +
-        this.fld("f_name", "Name", d.name, { placeholder: "Break Room Rat" }) +
+        this.fld("f_name", "Name", d.name, { placeholder: "Dire Wolf" }) +
         this.fld("f_icon", "Icon", d.icon, { placeholder: "🐀" }) +
       "</div>" +
+
+      '<div class="sect">Its face</div>' +
+      '<div class="portRow" id="f_portRow"></div>' +
+      '<div class="row2">' +
+        this.fld("f_portrait", "Picture path", Content.imageIsInline(d.portrait) ? "" : d.portrait,
+                 { placeholder: "art/dire-wolf.png" }) +
+        '<div class="portActs">' +
+          '<label class="btn sm ghost" for="f_portraitFile">Upload</label>' +
+          '<input type="file" id="f_portraitFile" accept="image/*" hidden>' +
+          '<button type="button" class="btn sm danger" id="f_portraitClear">Clear</button>' +
+        "</div>" +
+      "</div>" +
+      '<p class="tiny dimmer" style="margin:-4px 0 12px">A circle on the map, the whole picture in a ' +
+        "fight. The icon above is the fallback until there is one.</p>" +
       '<div class="row2">' +
         this.sel("f_type", "Type", d.type, Content.MONSTER_TYPES) +
         this.raritySelect("f_rarity", d.rarity) +
@@ -599,7 +625,8 @@ Object.assign(Ed, {
       this.formActions();
 
     this.bind("f_name", "name", null, () => this.refreshPreview());
-    this.bind("f_icon", "icon");
+    this.bind("f_icon", "icon", null, () => this.renderMonsterFace());
+    this.bind("f_portrait", "portrait", null, () => this.renderMonsterFace());
     this.bind("f_type", "type");
     this.bind("f_rarity", "rarity", null, () => { this.renderForm(); });
     this.bind("f_isBoss", "isBoss", Boolean);
@@ -608,7 +635,50 @@ Object.assign(Ed, {
     this.bind("f_attackName", "attackName");
     this.bind("f_damageType", "damageType", null, () => this.refreshPreview());
     this.bind("f_lootTableId", "lootTableId");
+    this.wireMonsterFace();
     this.refreshPreview();
+  },
+
+  /* The face, as the game will draw it: the token it wears on the map beside
+     the portrait a fight shows. Two previews rather than one because they
+     crop differently — a picture that reads well square can lose its head in
+     a circle, and finding that out in the game is finding it out too late. */
+  renderMonsterFace() {
+    const host = $("#f_portRow");
+    if (!host || !this.draft) return;
+    const d = this.draft;
+    const mid = Math.round(((+d.levelMin || 1) + (+d.levelMax || 1)) / 2);
+    const diff = clamp(mid, 1, 10);
+    host.innerHTML =
+      Art.tokenHtml({ image: d.portrait, icon: d.icon, difficulty: diff, size: 44, badge: diff }) +
+      Art.portraitHtml({ image: d.portrait, icon: d.icon, difficulty: diff, w: 74, h: 92 }) +
+      '<div class="tiny dimmer" style="align-self:center">' +
+        esc(d.portrait ? Art.describe(d.portrait) : "No picture — the icon stands in.") +
+        "<br>Ring colour is difficulty " + diff + ", from its level band." +
+      "</div>";
+  },
+
+  wireMonsterFace() {
+    const file = $("#f_portraitFile"), clear = $("#f_portraitClear");
+    if (file) file.onchange = () => {
+      const f = file.files && file.files[0];
+      file.value = "";
+      if (!f) return;
+      Art.readPortrait(f).then(url => {
+        this.draft.portrait = url;
+        const path = $("#f_portrait");
+        if (path) path.value = "";
+        this.renderMonsterFace();
+        this.toast("Picture attached (" + Math.round(url.length / 1024) + " KB). Save to keep it.", "good");
+      }).catch(e => this.toast(e.message, "bad", 4200));
+    };
+    if (clear) clear.onclick = () => {
+      this.draft.portrait = "";
+      const path = $("#f_portrait");
+      if (path) path.value = "";
+      this.renderMonsterFace();
+    };
+    this.renderMonsterFace();
   },
 
   refreshPreview() {
@@ -640,7 +710,7 @@ Object.assign(Ed, {
 
     host.innerHTML =
       this.formHeader(this.isNew ? "New loot table" : d.name) +
-      this.fld("f_name", "Name", d.name, { placeholder: "Office Salvage" }) +
+      this.fld("f_name", "Name", d.name, { placeholder: "Wayside Spoils" }) +
       '<div class="sect">Drop count</div>' +
       '<div class="row2">' +
         this.fld("f_dropsMin", "Minimum drops", d.dropsMin, { type: "number", min: 0 }) +
@@ -758,6 +828,34 @@ Object.assign(Ed, {
           "</div>"
         : "") +
 
+      /* What it takes to wear the thing. Blank weight means "whatever the gear
+         type says", which is the usual answer — the fields are here for the
+         piece that is unusually heavy, or meant for one class only. */
+      (consumable ? "" :
+        '<div class="sect">Requirements</div>' +
+        '<div class="row2">' +
+          this.sel("f_weight", "Armour weight", d.weight || "",
+            [{ value: "", label: "— " + (slot.weight ? slot.weight : "not armour") + " (from the gear type) —" },
+             { value: "light", label: "Light" }, { value: "medium", label: "Medium" },
+             { value: "heavy", label: "Heavy" }]) +
+          this.fld("f_reqLevel", "Min level", d.reqLevel || 0, { type: "number", min: 0 }) +
+        "</div>" +
+        '<div class="row3">' +
+          Content.REQ_ATTRS.slice(0, 3).map(a =>
+            this.fld("f_" + a.field, a.short, d[a.field] || 0, { type: "number", min: 0 })).join("") +
+        "</div>" +
+        '<div class="row2">' +
+          Content.REQ_ATTRS.slice(3, 5).map(a =>
+            this.fld("f_" + a.field, a.short, d[a.field] || 0, { type: "number", min: 0 })).join("") +
+        "</div>" +
+        '<label class="f"><span>Only these classes</span><div class="dayRow" id="edClasses">' +
+          ["Warrior", "Rogue", "Mage"].map(c =>
+            '<button type="button" data-class="' + c + '" class="' +
+            ((d.reqClasses || []).indexOf(c) >= 0 ? "on" : "") + '">' + c + "</button>").join("") +
+        "</div></label>" +
+        '<p class="tiny dimmer" style="margin:-6px 0 10px">Pick none and the armour weight and weapon ' +
+          "family decide it, which is what you usually want.</p>") +
+
       '<div class="sect">Game values</div>' +
       '<div class="row2">' +
         this.fld("f_itemLevel", "Item level", d.itemLevel, { type: "number", min: 1 }) +
@@ -779,8 +877,22 @@ Object.assign(Ed, {
     });
     this.bind("f_rarity", "rarity", null, () => this.renderForm());
     ["damageMin", "damageMax", "armor", "resistance", "itemLevel", "value",
-     "restoreHp", "restoreMana", "restoreStamina"]
+     "restoreHp", "restoreMana", "restoreStamina", "reqLevel"]
+      .concat(Content.REQ_ATTRS.map(a => a.field))
       .forEach(k => this.bind("f_" + k, k, this.int, () => this.refreshItemPreview()));
+    this.bind("f_weight", "weight", null, () => this.refreshItemPreview());
+    const classRow = $("#edClasses");
+    if (classRow) {
+      $$("[data-class]", classRow).forEach(b => {
+        b.onclick = () => {
+          const cls = b.getAttribute("data-class");
+          const have = this.draft.reqClasses || [];
+          this.draft.reqClasses = have.indexOf(cls) >= 0 ? have.filter(x => x !== cls) : have.concat([cls]);
+          b.classList.toggle("on");
+          this.refreshItemPreview();
+        };
+      });
+    }
     this.bind("f_damageType", "damageType", null, () => this.refreshItemPreview());
     this.bind("f_description", "description", null, () => this.refreshItemPreview());
 
@@ -803,8 +915,19 @@ Object.assign(Ed, {
     if (!box) return;
     const inst = Content.toGameItem(this.draft, this.draft.itemLevel);
     const slot = Content.slotDef(this.draft.gearType);
+    /* Spell out where it hangs and what it asks for: "Armor" told you almost
+       nothing once there were eight armour slots. */
+    const reqLine = [];
+    if (inst.weight) reqLine.push(cap(inst.weight));
+    if (inst.twoHanded) reqLine.push("two-handed");
+    Content.REQ_ATTRS.forEach(a => { if (inst.req && inst.req[a.key]) reqLine.push(a.short + " " + inst.req[a.key]); });
+    if (inst.reqLevel) reqLine.push("level " + inst.reqLevel);
+    if ((inst.reqClasses || []).length) reqLine.push(inst.reqClasses.join("/") + " only");
     box.innerHTML =
-      '<div class="pr"><span>Equipment slot</span><b>' + cap(inst.type) + "</b></div>" +
+      '<div class="pr"><span>Worn on</span><b>' +
+        (inst.slot ? cap(inst.slot) : cap(inst.type)) +
+        (inst.family ? ' <span class="tiny dimmer">' + esc(inst.family) + "</span>" : "") + "</b></div>" +
+      '<div class="pr"><span>Requires</span><b>' + esc(reqLine.join(" · ") || "nothing") + "</b></div>" +
       '<div class="pr"><span>Stat line</span><b>' + esc(inst.effect || "—") + "</b></div>" +
       '<div class="pr"><span>Sells for</span><b>' + Math.round(inst.price * 0.45) + " g</b></div>" +
       '<div class="pr"><span>Preview</span><span style="color:' + Content.rarityColor(this.draft.rarity) + '">' +
@@ -813,6 +936,73 @@ Object.assign(Ed, {
   },
 
   /* --------------------------------------------------------------- rarity */
+  /* ------------------------------------------------------------ portraits
+
+     A monster's portrait lives on its own row; a class has no row, so its
+     portrait lives in `content_portraits` keyed `class:Warrior`. This panel
+     is the only way to set one, and it is deliberately not a CRUD tab —
+     there is nothing to add or delete, only three faces to fill in.
+
+     `PORTRAIT_SUBJECTS` duplicates three class names and icons that really
+     live in js/player/classes.js, which the editors do not load. It is the
+     same trade the item form's attribute list makes: three strings copied is
+     cheaper than pulling a 260-line module into a page that needs no combat
+     maths. If a fourth class is ever added, this list is the second place. */
+  PORTRAIT_SUBJECTS: [
+    { key: "class:Warrior", label: "Warrior", icon: "\u2694\ufe0f" },
+    { key: "class:Rogue",   label: "Rogue",   icon: "\ud83d\udde1\ufe0f" },
+    { key: "class:Mage",    label: "Mage",    icon: "\ud83d\udd2e" }
+  ],
+
+  renderPortraits(wrap) {
+    const all = Content.portraits();
+    wrap.innerHTML =
+      '<div class="pad">' +
+        '<div class="noteBox" style="margin:0 0 14px">The picture in the middle of a character\u2019s ' +
+          "token. Upload one per class; it is shrunk to 256 px and stored with the database, so keep " +
+          "them simple. Without one the class emoji is still the face, which is what the game looked " +
+          "like before portraits existed." +
+        "</div>" +
+        '<div class="portGrid" id="edPortGrid">' +
+        this.PORTRAIT_SUBJECTS.map(sub => {
+          const url = all[sub.key] || "";
+          return '<div class="portCard">' +
+            Art.portraitHtml({ image: url, icon: sub.icon, difficulty: 0, w: 96, h: 120 }) +
+            "<div><b>" + esc(sub.label) + "</b>" +
+            '<div class="tiny dimmer">' + esc(url ? Art.describe(url) : "No portrait \u2014 the emoji stands in") +
+            "</div>" +
+            '<div class="portActs">' +
+              '<label class="btn sm ghost" for="pf_' + esc(sub.label) + '">Upload</label>' +
+              '<input type="file" id="pf_' + esc(sub.label) + '" accept="image/*" hidden>' +
+              '<button class="btn sm danger" data-clear="' + esc(sub.key) + '"' +
+                (url ? "" : " disabled") + ">Clear</button>" +
+            "</div></div></div>";
+        }).join("") +
+        "</div>" +
+      "</div>";
+
+    this.PORTRAIT_SUBJECTS.forEach(sub => {
+      const inp = $("#pf_" + sub.label, wrap);
+      if (inp) inp.onchange = () => {
+        const f = inp.files && inp.files[0];
+        inp.value = "";
+        if (!f) return;
+        Art.readPortrait(f).then(url => {
+          Content.setPortrait(sub.key, url);
+          this.renderAll();
+          this.toast(sub.label + " portrait saved (" + Math.round(url.length / 1024) + " KB).", "good");
+        }).catch(e => this.toast(e.message, "bad", 4200));
+      };
+    });
+    wrap.querySelectorAll("[data-clear]").forEach(b => {
+      b.onclick = () => {
+        Content.setPortrait(b.getAttribute("data-clear"), "");
+        this.renderAll();
+        this.toast("Portrait cleared.", "bad");
+      };
+    });
+  },
+
   renderRarity(wrap) {
     const cfg = Content.config();
     wrap.innerHTML =

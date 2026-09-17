@@ -539,11 +539,21 @@ Object.assign(Game, {
     const live = Denizens.near(p.latitude, p.longitude, this.denizenRangeM(), t);
     live.forEach(d => {
       const near = d.distance <= (+settings().interactRange || 35);
+      /* A circle with a coloured ring: the picture if the monster has one,
+         its emoji if not. The ring is difficulty, so the map answers "can I
+         take that?" before you tap it — and a character who is not a fight
+         has difficulty 0, which comes out blue. */
       const m = L.marker([d.latitude, d.longitude], {
         icon: L.divIcon({
-          className: "pinWrap", iconSize: [30, 30], iconAnchor: [15, 15],
-          html: '<div class="denizenPin ' + d.kind + (near ? " inrange" : "") +
-                '" data-denizen="' + esc(d.denizenId) + '">' + d.icon + "</div>"
+          className: "pinWrap", iconSize: [34, 34], iconAnchor: [17, 17],
+          html: Art.tokenHtml({
+            image: d.portrait, icon: d.icon, size: 34,
+            difficulty: d.kind === "creature" ? d.difficulty : 0,
+            badge: d.kind === "creature" ? d.difficulty : "",
+            state: near ? "inrange" : "",
+            cls: "dz " + d.kind,
+            data: { key: "denizen", value: d.denizenId }
+          })
         }), zIndexOffset: 400
       });
       m.on("click", () => this.openDenizen(d));
@@ -565,7 +575,7 @@ Object.assign(Game, {
 
     const body =
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
-        '<div class="avatar" style="width:46px;height:46px;font-size:24px">' + d.icon + "</div>" +
+        Art.portraitHtml({ image: d.portrait, icon: d.icon, difficulty: d.difficulty, w: 64, h: 78 }) +
         "<div><b style='font-size:15px'>" + esc(d.name) + "</b><br>" +
         '<span class="tiny dim">Difficulty ' + d.difficulty + "/10</span></div></div>" +
       '<div class="kv"><span>Distance</span><b>' + fmtDist(dist) + "</b></div>" +
@@ -599,15 +609,27 @@ Object.assign(Game, {
     const quest = d.questId ? Quests.get(d.questId) : null;
     const gate = quest ? Quests.canAccept(quest) : null;
     const run = quest ? Quests.runOf(quest.questId) : null;
+    /* Somebody who works out of a building is the same kind of character —
+       they just have a trade and somewhere to be. See js/ui/tradeui.js. */
+    const home = (d.buildingId && typeof Buildings !== "undefined")
+      ? Buildings.get(d.buildingId) : null;
 
     let body =
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
-        '<div class="avatar" style="width:46px;height:46px;font-size:24px">' + d.icon + "</div>" +
+        Art.portraitHtml({ image: d.portrait, icon: d.icon, difficulty: 0, w: 64, h: 78 }) +
         "<div><b style='font-size:15px'>" + esc(d.name) + "</b><br>" +
-        '<span class="tiny dim">' + esc(Denizens.ROAMS[d.roams] ? Denizens.ROAMS[d.roams].name : "wandering") +
+        '<span class="tiny dim">' + (home
+          ? esc(cap(Buildings.kind(home.kind).label)) + " · level " + Buildings.levelOf(home)
+          : esc(Denizens.ROAMS[d.roams] ? Denizens.ROAMS[d.roams].name : "wandering")) +
         "</span></div></div>" +
       '<div class="kv"><span>Distance</span><b>' + fmtDist(dist) + "</b></div>" +
-      (d.zone.placeName ? '<div class="kv"><span>Seen around</span><b>' +
+      (home
+        ? '<div class="kv"><span>Works at</span><b>' + esc(home.name) + "</b></div>" +
+          '<div class="kv"><span>Will</span><b>' +
+            Buildings.tradesOf(home).map(t => Buildings.TRADES[t].name.toLowerCase()).join(", ") +
+          "</b></div>"
+        : "") +
+      (!home && d.zone.placeName ? '<div class="kv"><span>Seen around</span><b>' +
         esc(d.zone.placeName) + "</b></div>" : "");
 
     if (quest) {
@@ -617,7 +639,7 @@ Object.assign(Game, {
       } else if (gate && !gate.ok) {
         body += '<p class="tiny" style="color:var(--warn);margin:8px 0 0">' + esc(gate.why) + "</p>";
       }
-    } else {
+    } else if (!home) {
       body += '<p class="tiny dimmer" style="margin:12px 0 0">Nothing for you today.</p>';
     }
     if (!near) {
@@ -625,6 +647,8 @@ Object.assign(Game, {
     }
 
     const buttons = [{ label: "Close", cls: "ghost" }];
+    // Trade first: it is why you walked over here.
+    (this.tradeButtons ? this.tradeButtons(d, near) : []).forEach(b => buttons.push(b));
     if (near && quest && gate && gate.ok) {
       buttons.push({ label: "Take it on", cls: "primary", onClick: () => {
         const r = Quests.accept(quest, { at: Loc.last });

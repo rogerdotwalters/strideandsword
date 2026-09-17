@@ -21,7 +21,7 @@
         "spawnTableId": "sp_seed_shallow",
         "chests": 2,
         "chestTier": "wooden",
-        "chestLootTableId": "lt_seed_vermin",
+        "chestLootTableId": "lt_seed_scraps",
         "hasBoss": true,
         "bossSpawnTableId": "sp_seed_boss",
         "experience": 0,
@@ -63,7 +63,7 @@
         "spawnTableId": "sp_seed_middle",
         "chests": 2,
         "chestTier": "wooden",
-        "chestLootTableId": "lt_seed_office",
+        "chestLootTableId": "lt_seed_wayside",
         "hasBoss": false,
         "bossSpawnTableId": "",
         "experience": 0,
@@ -79,7 +79,7 @@
   },
   {
     "instanceId": "inst_seed_stacks",
-    "name": "The Stacks",
+    "name": "The Vaults",
     "zoneId": "",
     "kind": "vault",
     "latitude": 41.8824,
@@ -99,7 +99,7 @@
         "spawnTableId": "sp_seed_deep",
         "chests": 3,
         "chestTier": "wooden",
-        "chestLootTableId": "lt_seed_deep",
+        "chestLootTableId": "lt_seed_barrow",
         "hasBoss": true,
         "bossSpawnTableId": "sp_seed_boss",
         "experience": 0,
@@ -111,6 +111,6 @@
     "timeEnd": "",
     "days": [],
     "respawnMinutes": 360,
-    "notes": "Nobody has filed anything here in a long time."
+    "notes": "Nothing has been counted here in a long time."
   }
 ]

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+	<name>Tyler shops.kml</name>
+	<Folder>
+		<name>Shops</name>
+		<description><![CDATA[The high street, walked on a Saturday]]></description>
+		<Placemark>
+			<name>building: Store level 3</name>
+			<description><![CDATA[The one with the awning]]></description>
+			<Point><coordinates>-95.3000,32.3500,0</coordinates></Point>
+		</Placemark>
+		<Placemark>
+			<name>smithy: Ash &amp; Ember level 5</name>
+			<Polygon>
+				<outerBoundaryIs><LinearRing><coordinates>
+					-95.3010,32.3510,0 -95.3005,32.3510,0 -95.3005,32.3505,0 -95.3010,32.3505,0 -95.3010,32.3510,0
+				</coordinates></LinearRing></outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>building: The Gilded Flask, tavern, level 2</name>
+			<Point><coordinates>-95.2995,32.3495,0</coordinates></Point>
+		</Placemark>
+	</Folder>
+	<Folder>
+		<name>Low ground</name>
+		<Placemark>
+			<name>The wet field</name>
+			<Polygon>
+				<outerBoundaryIs><LinearRing><coordinates>
+					-95.3200,32.3700,0 -95.3180,32.3700,0 -95.3180,32.3680,0 -95.3200,32.3680,0 -95.3200,32.3700,0
+				</coordinates></LinearRing></outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>Where I parked</name>
+			<Point><coordinates>-95.3300,32.3300,0</coordinates></Point>
+		</Placemark>
+	</Folder>
+</Document>
+</kml>

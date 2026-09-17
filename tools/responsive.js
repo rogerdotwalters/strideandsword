@@ -387,12 +387,12 @@ async function smallTargets(page, extraSelector) {
       const size = await page.$$eval('.layerSwitch button', bs => bs.map(b => {
         const r = b.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) };
       }));
-      if (size.length !== 3) throw new Error(size.length + ' layer buttons');
+      if (size.length !== 4) throw new Error(size.length + ' layer buttons');
       const small = size.filter(s => s.h < 40 || s.w < 55);
       if (small.length) throw new Error('too small: ' + JSON.stringify(small));
-      // Three tabs is the point where the strip could start pushing the bar
-      // sideways, so every layer is tapped and checked for overflow.
-      for (const m of ['dungeons', 'instances', 'locations']) {
+      // Four tabs is where the strip starts pushing the bar sideways on a
+      // phone, so every layer is tapped and checked for overflow.
+      for (const m of ['dungeons', 'instances', 'buildings', 'locations']) {
         await page.tap('[data-mode="' + m + '"]');
         await page.waitForTimeout(300);
         const mode = await page.evaluate(() => ME.Me.mode);
@@ -403,25 +403,92 @@ async function smallTargets(page, extraSelector) {
       return size.map(s => s.w + '×' + s.h).join(', ') + ', all three tap cleanly';
     });
 
-    await step('the zoom presets are reachable and thumb-sized', async () => {
+    await step('the map keeps its corner: one control, not four', async () => {
+      // The presets and Leaflet's zoom used to stand on the map here. On a
+      // phone that is most of a small map covered by controls, so they live in
+      // a dropdown and the map surface is the map.
       await page.evaluate(() => ME.Me.setPane('map'));
       await page.waitForTimeout(250);
       const r = await page.evaluate(() => {
-        const btns = [...document.querySelectorAll('#meZoom .zmBtn')];
-        return btns.map(b => {
-          const x = b.getBoundingClientRect();
-          // Whatever is actually on top at the button's centre.
-          const top = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2);
-          return { z: b.dataset.z, w: Math.round(x.width), h: Math.round(x.height),
-                   clear: b.contains(top) };
-        });
+        const shown = (sel) => {
+          const e = document.querySelector(sel);
+          return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0;
+        };
+        const b = document.querySelector('#meToolsBtn').getBoundingClientRect();
+        const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return {
+          presets: shown('#meZoom'), lzoom: shown('.mapWrap .leaflet-control-zoom'),
+          tools: shown('#meTools'),
+          w: Math.round(b.width), h: Math.round(b.height),
+          clear: document.querySelector('#meToolsBtn').contains(top),
+          open: !document.querySelector('#meToolsMenu').classList.contains('hidden')
+        };
       });
-      if (r.length !== 2) throw new Error('expected two presets, saw ' + r.length);
-      const small = r.filter(b => b.w < 40 || b.h < 40);
-      if (small.length) throw new Error('too small: ' + JSON.stringify(small));
-      const buried = r.filter(b => !b.clear);
-      if (buried.length) throw new Error('covered by something: ' + JSON.stringify(buried));
-      return r.map(b => b.z + ' ' + b.w + '×' + b.h).join(', ');
+      if (!r.tools) throw new Error('no map control button on a phone');
+      if (r.presets || r.lzoom) throw new Error('the old overlays are still on the map');
+      if (r.w < 40 || r.h < 40) throw new Error('the button is only ' + r.w + '×' + r.h);
+      if (!r.clear) throw new Error('something is covering the button');
+      if (r.open) throw new Error('the dropdown starts open');
+      return 'one ' + r.w + '×' + r.h + ' button, no preset stack, no Leaflet zoom';
+    });
+
+    await step('the dropdown opens, fits the screen, and every row is thumb-sized', async () => {
+      await page.tap('#meToolsBtn');
+      await page.waitForTimeout(250);
+      const r = await page.evaluate(() => {
+        const menu = document.querySelector('#meToolsMenu');
+        const m = menu.getBoundingClientRect();
+        const rows = [...menu.querySelectorAll('.mmRow')];
+        const bar = document.querySelector('.paneBar').getBoundingClientRect();
+        return {
+          open: !menu.classList.contains('hidden'),
+          acts: rows.map(b => b.dataset.act),
+          small: rows.filter(b => b.getBoundingClientRect().height < 40).length,
+          offRight: m.right > window.innerWidth + 1, offLeft: m.left < -1,
+          underBar: m.bottom > bar.top + 1,
+          current: rows.filter(b => b.classList.contains('on')).map(b => b.dataset.act)
+        };
+      });
+      if (!r.open) throw new Error('tapping it did nothing');
+      ['street', 'walk', 'in', 'out'].forEach(a => {
+        if (r.acts.indexOf(a) < 0) throw new Error('no "' + a + '" row');
+      });
+      if (r.small) throw new Error(r.small + ' rows under 40px');
+      if (r.offRight || r.offLeft) throw new Error('the menu runs off the screen');
+      if (r.underBar) throw new Error('the menu runs under the pane switcher');
+      if (r.current.length !== 1) throw new Error('it marks ' + r.current.length + ' presets as current');
+      return r.acts.length + ' rows, currently ' + r.current[0];
+    });
+
+    await step('a preset changes the zoom and closes the menu; tapping the map closes it too', async () => {
+      const before = await page.evaluate(() => ME.Me.map.getZoom());
+      await page.tap('#meToolsMenu .mmRow[data-act="walk"]');
+      await page.waitForTimeout(500);
+      const r = await page.evaluate(() => ({
+        z: ME.Me.map.getZoom(),
+        closed: document.querySelector('#meToolsMenu').classList.contains('hidden')
+      }));
+      if (!r.closed) throw new Error('the menu stayed open after choosing a view');
+      if (Math.abs(r.z - 19.5) > 0.5) throw new Error('walking view gave zoom ' + r.z);
+      // Zoom steps are the exception: nobody zooms in exactly once.
+      await page.tap('#meToolsBtn');
+      await page.waitForTimeout(200);
+      await page.tap('#meToolsMenu .mmRow[data-act="out"]');
+      await page.waitForTimeout(400);
+      const stepped = await page.evaluate(() => ({
+        z: ME.Me.map.getZoom(),
+        open: !document.querySelector('#meToolsMenu').classList.contains('hidden')
+      }));
+      if (!stepped.open) throw new Error('a zoom step closed the menu');
+      if (stepped.z >= r.z) throw new Error('zoom out went ' + r.z + ' → ' + stepped.z);
+      // And anywhere else dismisses it, including the map.
+      const box = await (await page.$('#map')).boundingBox();
+      await page.touchscreen.tap(box.x + 30, box.y + box.height - 30);
+      await page.waitForTimeout(300);
+      const closed = await page.evaluate(() =>
+        document.querySelector('#meToolsMenu').classList.contains('hidden'));
+      if (!closed) throw new Error('tapping the map left the menu open');
+      return before + ' → ' + r.z + ' → ' + stepped.z + ', closes on an outside tap';
     });
 
     await step('no overflow on any pane', async () => {
@@ -505,6 +572,24 @@ async function smallTargets(page, extraSelector) {
       if (!r.fabHidden) throw new Error('the floating button is showing on a desktop');
       if (r.map < 200 || r.table < 150 || r.form < 300) throw new Error(JSON.stringify(r));
       return 'map ' + r.map + 'px, table ' + r.table + 'px, form ' + r.form + 'px';
+    });
+
+    await step('the desktop keeps its zoom presets out in the open', async () => {
+      // The phone's dropdown is a phone measure. With room to spare, a preset
+      // you can see and hit in one movement beats one behind a menu.
+      const r = await page.evaluate(() => {
+        const show = (sel) => {
+          const e = document.querySelector(sel);
+          return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0;
+        };
+        return { presets: document.querySelectorAll('#meZoom .zmBtn').length,
+                 presetsShown: show('#meZoom'), lzoom: show('.mapWrap .leaflet-control-zoom'),
+                 tools: show('#meTools') };
+      });
+      if (r.tools) throw new Error('the phone dropdown is showing on a desktop');
+      if (!r.presetsShown || r.presets !== 2) throw new Error('the presets are gone: ' + JSON.stringify(r));
+      if (!r.lzoom) throw new Error("Leaflet's own zoom is hidden on a desktop");
+      return r.presets + ' presets and the +/− control, no dropdown';
     });
 
     await step('desktop has no sideways scroll either', async () => {

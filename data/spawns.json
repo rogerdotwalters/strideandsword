@@ -1,14 +1,166 @@
 [
   {
-    "spawnTableId": "sp_seed_shallow",
-    "name": "Shallow Vermin",
+    "spawnTableId": "sp_water",
+    "name": "The Wash",
     "monsters": [
-      "mon_seed_loose_stapler_swarm",
-      "mon_seed_break_room_rat",
-      "mon_seed_goblin_intern",
-      "mon_seed_filing_cabinet_mimic",
-      "mon_seed_corridor_wisp",
-      "mon_seed_vending_golem"
+      "mon_seed_reed_nipper",
+      "mon_seed_drowned_lantern",
+      "mon_seed_river_troll"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "River banks, creek crossings and lake shores."
+  },
+  {
+    "spawnTableId": "sp_marsh",
+    "name": "The Fen",
+    "monsters": [
+      "mon_seed_bog_leech",
+      "mon_seed_marsh_wisp",
+      "mon_seed_mire_hag"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Wetland and floodplain \u2014 soft ground, bad footing."
+  },
+  {
+    "spawnTableId": "sp_wood",
+    "name": "The Greenwood",
+    "monsters": [
+      "mon_seed_thicket_boar",
+      "mon_seed_bark_lurker",
+      "mon_seed_dire_wolf"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Forest, scrub and old orchard."
+  },
+  {
+    "spawnTableId": "sp_meadow",
+    "name": "The Commons",
+    "monsters": [
+      "mon_seed_meadow_sprite",
+      "mon_seed_waylayer",
+      "mon_seed_pasture_wyvernling"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Grass, parkland and pasture."
+  },
+  {
+    "spawnTableId": "sp_plain",
+    "name": "The Open Fields",
+    "monsters": [
+      "mon_seed_rick_kobold",
+      "mon_seed_scarecrow_husk",
+      "mon_seed_plains_ogre"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Farmland and open ground."
+  },
+  {
+    "spawnTableId": "sp_rock",
+    "name": "The Scarp",
+    "monsters": [
+      "mon_seed_scree_skitter",
+      "mon_seed_quarry_golem",
+      "mon_seed_cliffside_harpy"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Quarry, cliff and bare stone."
+  },
+  {
+    "spawnTableId": "sp_waste",
+    "name": "The Blight",
+    "monsters": [
+      "mon_seed_ash_rat",
+      "mon_seed_rust_wraith",
+      "mon_seed_blight_ghoul"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Spoil ground, sidings and anywhere left to rot."
+  },
+  {
+    "spawnTableId": "sp_town",
+    "name": "The Streets",
+    "monsters": [
+      "mon_seed_gutter_imp",
+      "mon_seed_alley_cutpurse",
+      "mon_seed_rooftop_stalker"
+    ],
+    "weights": [
+      6,
+      3,
+      1
+    ],
+    "packMin": 1,
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Built-up ground \u2014 the default where nothing is drawn."
+  },
+  {
+    "spawnTableId": "sp_seed_shallow",
+    "name": "Shallow Things",
+    "monsters": [
+      "mon_seed_gutter_imp",
+      "mon_seed_thicket_boar",
+      "mon_seed_meadow_sprite",
+      "mon_seed_reed_nipper",
+      "mon_seed_rick_kobold",
+      "mon_seed_scree_skitter"
     ],
     "weights": [
       6,
@@ -19,21 +171,23 @@
       1
     ],
     "packMin": 1,
-    "packMax": 3
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "What a first floor or a low-difficulty site holds."
   },
   {
     "spawnTableId": "sp_seed_middle",
-    "name": "Corridor Things",
+    "name": "Deeper Things",
     "monsters": [
-      "mon_seed_loose_stapler_swarm",
-      "mon_seed_break_room_rat",
-      "mon_seed_goblin_intern",
-      "mon_seed_filing_cabinet_mimic",
-      "mon_seed_corridor_wisp",
-      "mon_seed_vending_golem",
-      "mon_seed_stairwell_stalker",
-      "mon_seed_parking_lot_wraith",
-      "mon_seed_hoarding_kobold"
+      "mon_seed_alley_cutpurse",
+      "mon_seed_bark_lurker",
+      "mon_seed_waylayer",
+      "mon_seed_drowned_lantern",
+      "mon_seed_marsh_wisp",
+      "mon_seed_rust_wraith",
+      "mon_seed_dire_wolf",
+      "mon_seed_river_troll"
     ],
     "weights": [
       6,
@@ -43,22 +197,25 @@
       2,
       1,
       1,
-      1,
       1
     ],
     "packMin": 1,
-    "packMax": 3
+    "packMax": 3,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "Mid-floor company."
   },
   {
     "spawnTableId": "sp_seed_deep",
-    "name": "Deep Floor",
+    "name": "The Deep Places",
     "monsters": [
-      "mon_seed_vending_golem",
-      "mon_seed_stairwell_stalker",
-      "mon_seed_parking_lot_wraith",
-      "mon_seed_hoarding_kobold",
-      "mon_seed_fluorescent_horror",
-      "mon_seed_quarterly_review"
+      "mon_seed_mire_hag",
+      "mon_seed_plains_ogre",
+      "mon_seed_blight_ghoul",
+      "mon_seed_cliffside_harpy",
+      "mon_seed_river_troll",
+      "mon_seed_fen_horror",
+      "mon_seed_drowned_king"
     ],
     "weights": [
       6,
@@ -66,25 +223,32 @@
       4,
       3,
       2,
+      2,
       1
     ],
     "packMin": 1,
-    "packMax": 2
+    "packMax": 2,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "The bottom of a dungeon, and the worst of a blighted region."
   },
   {
     "spawnTableId": "sp_seed_boss",
-    "name": "Something Large",
+    "name": "Something Ancient",
     "monsters": [
-      "mon_seed_the_facilities_manager",
-      "mon_seed_ancient_copier_awoken",
-      "mon_seed_warden_of_the_skyway"
+      "mon_seed_the_warden_of_the_ford",
+      "mon_seed_moss_grown_colossus",
+      "mon_seed_the_pale_wyrm"
     ],
     "weights": [
-      1,
-      1,
+      3,
+      2,
       1
     ],
     "packMin": 1,
-    "packMax": 1
+    "packMax": 1,
+    "createdAt": 1789010691207,
+    "updatedAt": 1789010691207,
+    "notes": "One of them, and only one."
   }
 ]

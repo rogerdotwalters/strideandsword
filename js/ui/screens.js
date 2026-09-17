@@ -93,9 +93,11 @@ const Screens = {
     const list = $("#charList");
     chars.sort((a, b) => b.createdAt - a.createdAt).forEach(c => {
       Characters.refreshMaxes(c);
-      const row = el("button", "pick");
+      const row = el("button", "pick withFace");
       row.innerHTML =
-        '<h4><span class="ico">' + CLASSES[c.class].icon + '</span>' + esc(c.name) + '</h4>' +
+        Art.portraitHtml({ image: Content.classPortrait(c.class), icon: CLASSES[c.class].icon,
+                           difficulty: 0, w: 52, h: 64, cls: "pickFace" }) +
+        '<h4>' + esc(c.name) + '</h4>' +
         '<p>Level ' + c.level + " " + c.race + " " + c.class +
           ' · <span class="mono">' + c.stats.hp + "/" + c.stats.maxHp + ' HP</span>' +
           ' · <span class="mono">' + c.gold + ' g</span></p>' +
@@ -232,7 +234,8 @@ const Screens = {
           '<div class="err" id="cErr"></div>' +
           '<div class="divider"></div>' +
           '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
-            '<div class="avatar" style="width:46px;height:46px;font-size:24px">' + CLASSES[state.cls].icon + "</div>" +
+            Art.portraitHtml({ image: Content.classPortrait(state.cls), icon: CLASSES[state.cls].icon,
+                               difficulty: 0, w: 52, h: 64 }) +
             "<div><b>" + state.race + " " + state.cls + "</b><br>" +
             '<span class="tiny dim">' + RACES[state.race].blurb + "</span></div></div>" +
           '<div class="statGrid">' + ATTRS.map(a =>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+<Document>
+	<name>Tyler survey.kml</name>
+	<Style id="poly-000000-1200-77-nodesc-normal">
+		<LineStyle><color>ff000000</color><width>1.2</width></LineStyle>
+		<PolyStyle><color>4d000000</color></PolyStyle>
+	</Style>
+	<Folder>
+		<name>Low ground</name>
+		<description><![CDATA[Places that hold water after a storm]]></description>
+		<Placemark>
+			<name>Behind the school</name>
+			<description><![CDATA[Standing water most of the winter. <b>Boggy</b>.]]></description>
+			<styleUrl>#poly-000000-1200-77-nodesc</styleUrl>
+			<Polygon>
+				<outerBoundaryIs><LinearRing><coordinates>
+					-95.3050,32.3480,0 -95.3010,32.3480,0 -95.3010,32.3510,0 -95.3050,32.3510,0 -95.3050,32.3480,0
+				</coordinates></LinearRing></outerBoundaryIs>
+				<innerBoundaryIs><LinearRing><coordinates>
+					-95.3040,32.3490,0 -95.3030,32.3490,0 -95.3030,32.3500,0 -95.3040,32.3500,0 -95.3040,32.3490,0
+				</coordinates></LinearRing></innerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>Two wet corners</name>
+			<MultiGeometry>
+				<Polygon><outerBoundaryIs><LinearRing><coordinates>
+					-95.2900,32.3400,0 -95.2880,32.3400,0 -95.2880,32.3420,0 -95.2900,32.3420,0 -95.2900,32.3400,0
+				</coordinates></LinearRing></outerBoundaryIs></Polygon>
+				<Polygon><outerBoundaryIs><LinearRing><coordinates>
+					-95.2860,32.3440,0 -95.2840,32.3440,0 -95.2840,32.3460,0 -95.2860,32.3460,0 -95.2860,32.3440,0
+				</coordinates></LinearRing></outerBoundaryIs></Polygon>
+			</MultiGeometry>
+		</Placemark>
+	</Folder>
+	<Folder>
+		<name>Pastures</name>
+		<Placemark>
+			<name>North pasture</name>
+			<Polygon><outerBoundaryIs><LinearRing><coordinates>-95.3200,32.3600,0 -95.3150,32.3600,0 -95.3150,32.3650,0 -95.3200,32.3650,0 -95.3200,32.3600,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+		</Placemark>
+	</Folder>
+	<Placemark>
+		<name>Black Fork Creek</name>
+		<LineString><tessellate>1</tessellate><coordinates>-95.3300,32.3000,0 -95.3250,32.3080,0 -95.3180,32.3140,0 -95.3100,32.3190,0</coordinates></LineString>
+	</Placemark>
+	<Placemark>
+		<name>Where I parked</name>
+		<Point><coordinates>-95.3011,32.3513,0</coordinates></Point>
+	</Placemark>
+	<Placemark>
+		<name>Unnamed shape</name>
+		<Polygon><outerBoundaryIs><LinearRing><coordinates>-95.2700,32.3700,0 -95.2650,32.3700,0 -95.2650,32.3750,0 -95.2700,32.3750,0 -95.2700,32.3700,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+	</Placemark>
+</Document>
+</kml>

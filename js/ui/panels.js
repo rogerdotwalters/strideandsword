@@ -10,7 +10,8 @@ const Panels = {
       const a = Calc.effectiveAttrs(c);
       body.innerHTML =
         '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
-          '<div class="avatar" style="width:48px;height:48px;font-size:25px">' + CLASSES[c.class].icon + "</div>" +
+          Art.portraitHtml({ image: Content.classPortrait(c.class), icon: CLASSES[c.class].icon,
+                             difficulty: 0, w: 54, h: 66 }) +
           "<div><b style='font-size:16px'>" + esc(c.name) + "</b><br>" +
           "<span class='tiny dim'>Level " + c.level + " " + c.race + " " + c.class + " · " + c.gold + " gold</span></div></div>" +
         (c.unspentPoints
@@ -92,16 +93,19 @@ const Panels = {
     const body = el("div");
     const draw = () => {
       body.innerHTML = "";
-      const slots = ["weapon", "armor", "trinket"];
+      /* Twelve slots rather than three. Drawn as a grid of small cards in the
+         order the body wears them, so an empty shoulder is as visible as a
+         full one — the empty ones are the whole point of a paper doll. */
       const slotRow = el("div", "slotRow");
-      slots.forEach(sl => {
-        const eq = (c.equipment || []).find(i => Items.slotOf(i) === sl);
-        const d = el("div", "slot" + (eq ? " filled r-" + eq.rarity : ""));
-        d.innerHTML = '<span class="sl">' + sl + "</span>" +
+      EQUIP_SLOTS.forEach(sl => {
+        const eq = (c.equipment || []).find(i => Items.slotOf(i) === sl.key);
+        const locked = !eq && blockedBy(sl.key);
+        const d = el("div", "slot" + (eq ? " filled r-" + eq.rarity : "") + (locked ? " locked" : ""));
+        d.innerHTML = '<span class="sl">' + sl.icon + " " + esc(sl.label) + "</span>" +
           (eq ? '<span class="nmv c-' + eq.rarity + '">' +
                   '<span class="slotIco">' + Content.itemIconHtml(eq, 15) + "</span>" + esc(eq.name) +
                   '</span><span class="stt">' + esc(eq.effect) + "</span>"
-              : '<span class="nmv dimmer">empty</span>');
+              : '<span class="nmv dimmer">' + (locked ? "held by both hands" : "empty") + "</span>");
         if (eq) {
           const b = el("button", "btn sm ghost", "Remove");
           b.style.marginTop = "6px";
@@ -128,14 +132,25 @@ const Panels = {
         row.innerHTML = '<span class="ico">' + Content.itemIconHtml(it, 18) + '</span>' +
           '<div class="body"><div class="nm c-' + it.rarity + '">' + esc(it.name) +
           ' <span class="badge">' + it.rarity + '</span></div>' +
-          '<div class="ds">' + esc(it.effect) + " · " + it.price + " g</div></div>";
+          '<div class="ds">' + esc(it.effect) + " · " + it.price + " g</div>" +
+          (Items.requirementText(it) ? '<div class="rq">' + esc(Items.requirementText(it)) + "</div>" : "") +
+          "</div>";
         const acts = el("div", "acts");
         if (it.type === "potion") {
           const b = el("button", "btn sm primary", "Drink");
           b.onclick = () => { usePotion(it); };
           acts.appendChild(b);
         } else if (Items.slotOf(it)) {
-          const b = el("button", "btn sm primary", "Equip");
+          const gate = Items.canEquip(c, it);
+          const b = el("button", "btn sm " + (gate.ok ? "primary" : "ghost"), "Equip");
+          if (!gate.ok) {
+            b.disabled = true;
+            b.title = gate.why;
+            row.classList.add("cantWear");
+            const why = el("div", "tiny", gate.why);
+            why.style.cssText = "color:var(--blood);margin-top:2px";
+            row.querySelector(".body").appendChild(why);
+          }
           b.onclick = () => { equip(it); };
           acts.appendChild(b);
         }
@@ -155,14 +170,43 @@ const Panels = {
       Game.renderHud();
       draw();
     }
+    /** The off hand is spoken for while a two-handed weapon is in the main. */
+    function blockedBy(slotKey) {
+      if (slotKey !== "offhand") return null;
+      const main = (c.equipment || []).find(x => Items.slotOf(x) === "mainhand");
+      return main && main.twoHanded ? main : null;
+    }
+
     function equip(it) {
       const sl = Items.slotOf(it);
+      const gate = Items.canEquip(c, it);
+      if (!gate.ok) { UI.toast(gate.why, "bad", 2600); return; }
+      if (blockedBy(sl)) {
+        UI.toast("Both hands are on the " + blockedBy(sl).name + ".", "bad", 2600);
+        return;
+      }
+      const swapped = [];
       const cur = (c.equipment || []).find(x => Items.slotOf(x) === sl);
-      if (cur) { c.equipment = c.equipment.filter(x => x !== cur); c.inventory.push(cur); }
+      if (cur) swapped.push(cur);
+      /* Taking up a two-hander puts down whatever was in the off hand. Doing
+         it silently is how a shield goes missing, so it is said out loud. */
+      if (it.twoHanded) {
+        const off = (c.equipment || []).find(x => Items.slotOf(x) === "offhand");
+        if (off) swapped.push(off);
+      }
+      if (swapped.length && c.inventory.length + swapped.length > 20) {
+        UI.toast("Pack is too full to take that off.", "bad", 2600);
+        return;
+      }
+      swapped.forEach(x => {
+        c.equipment = c.equipment.filter(y => y !== x);
+        c.inventory.push(x);
+      });
       c.inventory = c.inventory.filter(x => x.itemId !== it.itemId);
       c.equipment = (c.equipment || []).concat([it]);
       API.request("/inventory/item/" + it.itemId + "/equip", "PATCH", { equipped: true });
-      UI.toast("Equipped " + it.name + ".", "good", 1800);
+      UI.toast("Equipped " + it.name + "." +
+        (swapped.length > 1 ? " Put down your " + swapped[1].name + "." : ""), "good", 2200);
       persist();
     }
     function unequip(it) {
@@ -208,6 +252,13 @@ const Panels = {
         "> <span>Dev test mode <small class='dimmer'>— simulate my location instead of using GPS</small></span></label>" +
       '<label class="tick"><input type="checkbox" id="setFollow"' + (s.followPlayer ? " checked" : "") + "> Keep the map centred on me</label>" +
       '<label class="tick"><input type="checkbox" id="setAcc"' + (s.highAccuracy ? " checked" : "") + "> High-accuracy GPS (uses more battery)</label>" +
+      '<label class="tick"><input type="checkbox" id="setTravel"' + (s.travelVeil !== false ? " checked" : "") +
+        "> <span>Pause while travelling <small class='dimmer'>— above " + (+s.travelEnterKph || 16) +
+        " km/h the game stops counting and the map stops loading</small></span></label>" +
+      '<p class="tiny dimmer" style="margin:-4px 0 10px">Currently ' +
+        (Loc.travelling ? "<b style='color:var(--gold)'>travelling</b> at " + Math.round(Loc.speedKph()) + " km/h."
+                        : "walking pace" + (Loc.speedMps > 0.4 ? " — " + Math.round(Loc.speedKph()) + " km/h." : ".")) +
+      "</p>" +
       '<div class="divider"></div>' +
       '<h4 style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-3)">The map</h4>' +
       '<label class="tick"><input type="checkbox" id="setFantasy"' + (s.fantasyMap ? " checked" : "") +
@@ -356,6 +407,13 @@ const Panels = {
       if (settings().locationMode === "gps") { Loc.stop(); Loc.start(); }
     };
     $("#setSim", body).onchange = (e) => Game.setLocationMode(e.target.checked ? "sim" : "gps");
+    $("#setTravel", body).onchange = (e) => {
+      saveSettings({ travelVeil: e.target.checked });
+      // Switching it off mid-drive has to lift the veil there and then, not on
+      // the next fix — which on a motorway could be the next county.
+      Game.renderTravel();
+      if (!e.target.checked) Game.onTravelChange(false);
+    };
     $("#setSnap", body).onchange = (e) => saveSettings({ snapNodesToBuildings: e.target.checked });
     $("#setFantasy", body).onchange = (e) => {
       saveSettings({ fantasyMap: e.target.checked });

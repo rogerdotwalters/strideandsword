@@ -373,6 +373,13 @@ async function walkUntil(page, done, budget) {
   });
 
   await step('stepping out holds your place, and you can pick it up', async () => {
+    /* Winning a fight can raise two panels — the result, then the rewards —
+       and one clearModal only takes the top one. The survivor sits over the
+       dungeon bar, and `click('#dgnLeave')` then waits thirty seconds for a
+       button it can never reach. That was the one intermittent failure this
+       suite had; clear the board before touching the bar. */
+    await g.evaluate(() => { if (SS.Game.inCombat) SS.Combat.end('won'); });
+    for (let i = 0; i < 3 && await clearModal(g); i++) { /* one panel per pass */ }
     const at = await g.evaluate(() => Math.round(SS.Dungeon.current().walked));
     await g.click('#dgnLeave');
     await g.waitForTimeout(300);

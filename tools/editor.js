@@ -49,7 +49,9 @@ async function newPage(browser) {
 
   await step('boots and seeds the three tables on first run', async () => {
     const s = await page.evaluate(() => ED.Content.stats());
-    if (s.monsters !== 14) throw new Error('monsters: ' + s.monsters);
+    // The seeded bestiary is terrain-shaped: three apiece across eight
+    // terrains, two for the deep floors and three bosses.
+    if (s.monsters !== 29) throw new Error('monsters: ' + s.monsters);
     if (s.loot !== 4) throw new Error('loot tables: ' + s.loot);
     if (s.items !== 33) throw new Error('items: ' + s.items);
     const rows = await page.$$('table.grid tbody tr');

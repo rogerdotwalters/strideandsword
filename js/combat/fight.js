@@ -53,8 +53,18 @@ const Combat = {
       '<div class="cbEnemies" id="cbEnemies"></div>' +
       '<div class="cbLogWrap"><div class="cbLog" id="cbLog"></div></div>' +
       '<div class="cbActions">' +
-        '<div class="bar" style="margin-bottom:9px"><span class="lbl">❤</span>' + UI.bar("hp", 1, 1) + '<span class="num" id="cbHp"></span></div>' +
-        '<div class="bar" style="margin-bottom:11px"><span class="lbl" id="cbResIco">⚡</span>' + UI.bar("sp", 1, 1) + '<span class="num" id="cbRes"></span></div>' +
+        '<div class="cbYou">' +
+          /* You, in the same frame your enemy is wearing. Difficulty 0 — you
+             are not a difficulty — so the ring is the friendly blue. */
+          Art.portraitHtml({
+            image: Content.classPortrait(Game.ch.class),
+            icon: CLASSES[Game.ch.class].icon, difficulty: 0, w: 48, h: 59
+          }) +
+          '<div class="cbBars">' +
+            '<div class="bar" style="margin-bottom:9px"><span class="lbl">❤</span>' + UI.bar("hp", 1, 1) + '<span class="num" id="cbHp"></span></div>' +
+            '<div class="bar"><span class="lbl" id="cbResIco">⚡</span>' + UI.bar("sp", 1, 1) + '<span class="num" id="cbRes"></span></div>' +
+          "</div>" +
+        "</div>" +
         '<div class="actGrid" id="cbActs"></div>' +
       "</div>";
     document.body.appendChild(this.root);
@@ -90,7 +100,11 @@ const Combat = {
       const d = el("div", "enemy" + (e.alive ? "" : " dead") + (i === this.targetIdx && e.alive ? " target" : ""));
       d.id = "en_" + e.enemyId;
       d.innerHTML =
-        '<div class="face">' + e.icon + "</div>" +
+        Art.portraitHtml({
+          image: e.portrait, icon: e.icon, difficulty: e.difficulty || this.node.difficulty,
+          w: 62, h: 76, cls: "face", state: e.alive ? "" : "dead",
+          badge: "Lv " + e.level
+        }) +
         '<div class="info"><div class="top"><b>' + esc(e.name) + "</b>" +
           '<span class="tiny dimmer">Lv ' + e.level + (e.boss ? " · BOSS" : "") + "</span></div>" +
           UI.bar("hp", e.hp, e.maxHp) +

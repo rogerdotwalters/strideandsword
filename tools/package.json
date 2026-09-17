@@ -4,7 +4,7 @@
   "private": true,
   "description": "Test tooling for Stride & Sword. Deliberately NOT at the repo root - Cloudflare Pages auto-installs dependencies when it finds a root package.json, and this project has no build step.",
   "scripts": {
-    "test": "node smoke.js && node permissions.js && node editor.js && node mapeditor.js && node dungeons.js && node instances.js && node spawning.js && node chunks.js && node shapes.js && node quests.js && node denizens.js && node responsive.js",
+    "test": "node smoke.js && node permissions.js && node editor.js && node equipment.js && node mapeditor.js && node dungeons.js && node instances.js && node spawning.js && node chunks.js && node shapes.js && node quests.js && node denizens.js && node travel.js && node regions.js && node buildings.js && node faces.js && node responsive.js",
     "test:game": "node smoke.js",
     "test:permissions": "node permissions.js",
     "balance": "node balance.js",
@@ -21,7 +21,13 @@
     "test:chunks": "node chunks.js",
     "test:shapes": "node shapes.js",
     "test:quests": "node quests.js",
-    "test:denizens": "node denizens.js"
+    "test:denizens": "node denizens.js",
+    "test:travel": "node travel.js",
+    "map": "node mapimport.js",
+    "test:regions": "node regions.js",
+    "test:equipment": "node equipment.js",
+    "test:buildings": "node buildings.js",
+    "test:faces": "node faces.js"
   },
   "devDependencies": {
     "leaflet": "^1.9.4",

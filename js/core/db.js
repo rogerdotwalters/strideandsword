@@ -30,7 +30,15 @@ const DB = {
     spawnRules: "spawn-rules.json",
     /* Also not a content table: hand-drawn scenery, in its own file so it can
        be edited elsewhere and uploaded whole. See js/world/shapes.js. */
-    shapes:     "shapes.json"
+    shapes:     "shapes.json",
+    /* The ground itself: terrain regions that decide what spawns on them.
+       Its own file for the same reason shapes have one — it is authored
+       elsewhere (a GIS, the importer) and uploaded whole. */
+    regions:    "regions.json",
+    /* The places on the map and the people who work out of them. GeoJSON
+       like regions, for the same reason: it is authored in Google Earth as
+       often as it is authored here. See js/world/buildings.js. */
+    buildings:  "buildings.json"
   },
 
   raw: {},              // what the files actually held, after load
@@ -110,6 +118,31 @@ const DB = {
     return rows.length;
   },
 
+  seedRegions(force) {
+    const rows = this.raw.regions;
+    if (typeof Regions === "undefined") return 0;
+    // The file is a GeoJSON FeatureCollection, not a row array.
+    const feats = rows && (rows.features || (Array.isArray(rows) ? rows : null));
+    if (!Array.isArray(feats)) return 0;
+    if (!force && Regions.exists()) return 0;
+    const out = [];
+    feats.forEach(f => Regions.fromFeature(f).forEach(r => out.push(r)));
+    Regions.replaceAll(out);
+    return out.length;
+  },
+
+  seedBuildings(force) {
+    const rows = this.raw.buildings;
+    if (typeof Buildings === "undefined") return 0;
+    const feats = rows && (rows.features || (Array.isArray(rows) ? rows : null));
+    if (!Array.isArray(feats)) return 0;
+    if (!force && Buildings.exists()) return 0;
+    const out = [];
+    feats.forEach(f => { const b = Buildings.fromFeature(f); if (b) out.push(b); });
+    Buildings.replaceAll(out);
+    return out.length;
+  },
+
   seedAll(force) {
     const out = {};
     if (this.raw.config && (force || !Store.get(Content.KEYS.config, null))) {
@@ -120,6 +153,8 @@ const DB = {
       .forEach(n => { out[n] = this.seedTable(n, force); });
     out.players = this.seedPlayers(force);
     out.shapes = this.seedShapes(force);
+    out.regions = this.seedRegions(force);
+    out.buildings = this.seedBuildings(force);
     return out;
   },
 
@@ -163,6 +198,24 @@ const DB = {
         });
         Content.replaceAll(table, rows);
       });
+
+    /* Buildings are not a Content table, but they are seeded from a file with
+       the same placeholder coordinates, so they move with everything else —
+       footprint and all, or a traced outline would be left behind in
+       Chicago. They are allowed to sit closer than MIN_M: a shop you can see
+       from where you start is a welcome, not an ambush. */
+    if (typeof Buildings !== "undefined" && Buildings.exists()) {
+      const bs = Buildings.all();
+      let touched = 0;
+      bs.forEach(b => {
+        if (!/^bld_seed_/.test(b.buildingId || "")) return;
+        b.latitude += dLat; b.longitude += dLng;
+        (b.footprint || []).forEach(p => { p[0] += dLat; p[1] += dLng; });
+        touched++; moved++;
+      });
+      if (touched) Buildings.replaceAll(bs);
+    }
+
     Store.set("seed_rehomed", { at: nowTs(), zoneId: zone.zoneId });
     return moved;
   },

@@ -489,22 +489,3 @@ Object.assign(Mi, {
     this.bindLevel("lv_gold_" + i, i, "gold", this.int);
   }
 });
-
-window.ME = { Me, Md, Mi, Content, Store, DB, K };
-
-/* Loaded last, so every layer exists by the time this runs. Pull data/*.json
-   in first, seed anything still empty, then draw. */
-async function meBoot() {
-  Me.init();
-  try {
-    await DB.load();
-    DB.seedAll(false);
-    if (DB.problems.length) {
-      Me.toast("Some database files did not load — run `npm run serve` and open over http.", "bad");
-      console.warn("[db]", DB.problems);
-    }
-    Me.renderAll();
-  } catch (e) { console.error("[db]", e); }
-}
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", meBoot);
-else meBoot();

@@ -25,8 +25,27 @@ const { serve, BASE } = require('./serve');
       ch.level = level;
       // level-up points spent in the same favoured attributes
       for (let i = 1; i < level; i++) { ch.attributes[favor[0]] += 3; ch.attributes[favor[1]] += 2; }
-      // gear roughly matching level
-      ch.equipment = [S.Items.generate(level, 12, 3, 'weapon'), S.Items.generate(level, 12, 3, 'armor')];
+      /* A full kit, roughly matching level.
+         Since the paper doll went from three slots to twelve, each piece
+         carries a share of what one piece used to — so a sim that equipped
+         one weapon and one breastplate would now be testing a character in
+         a quarter of their armour and would report win rates nobody will
+         ever see. Dress them properly, and anything they cannot wear (plate
+         on a mage) is simply left off, which is what a real player does. */
+      const KIT = ['mainhand', 'offhand', 'helm', 'shoulders', 'chest', 'gloves',
+                   'belt', 'legs', 'boots', 'back', 'neck', 'ring'];
+      ch.equipment = [];
+      KIT.forEach(slot => {
+        for (let tries = 0; tries < 8; tries++) {
+          const it = S.Items.generate(level, 12, 3, slot);
+          if (!it || S.Items.slotOf(it) !== slot) continue;
+          if (!S.Items.canEquip(ch, it).ok) continue;
+          if (it.twoHanded && slot === 'mainhand') ch._twoHanded = true;
+          if (slot === 'offhand' && ch._twoHanded) return;     // both hands busy
+          ch.equipment.push(it);
+          return;
+        }
+      });
       S.Characters.refreshMaxes(ch, true);
 
       const foes = S.Bestiary.packFor({ type: nodeType, difficulty }, level);
